@@ -181,11 +181,11 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         pos += 0x4;
 
         //Size of vertices:
-        mesh.vertexsize = ReadShort( mdbBytes, pos );
+        mesh.vertexsize = ReadShort( &mdbBytes, pos );
         pos += 0x2;
 
         //Layout Count:
-        mesh.layoutcount = ReadShort( mdbBytes, pos );
+        mesh.layoutcount = ReadShort( &mdbBytes, pos );
         pos += 0x2;
 
         //Read the vertex layout information.
@@ -215,7 +215,7 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         int indPos = base + IndexDataInfoOffs;
         for( int v = 0; v < mesh.indicesnumber; ++v )
         {
-            short data = ReadShort( mdbBytes, indPos );
+            short data = ReadShort( &mdbBytes, indPos );
             test2.push_back( data );
             indPos += 0x2;
         }
@@ -239,22 +239,22 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
                 }
                 else if( info.type == 7 ) //array of 4 half floats
                 {
-                    short bytes = ReadShort( mdbBytes, vertPos );
+                    short bytes = ReadShort( &mdbBytes, vertPos );
                     vertPos += 0x2;
 
                     float x = UnpackHalf( bytes );
 
-                    bytes = ReadShort( mdbBytes, vertPos );
+                    bytes = ReadShort( &mdbBytes, vertPos );
                     vertPos += 0x2;
 
                     float y = UnpackHalf( bytes );
 
-                    bytes = ReadShort( mdbBytes, vertPos );
+                    bytes = ReadShort( &mdbBytes, vertPos );
                     vertPos += 0x2;
 
                     float z = UnpackHalf( bytes );
 
-                    bytes = ReadShort( mdbBytes, vertPos );
+                    bytes = ReadShort( &mdbBytes, vertPos );
                     vertPos += 0x2;
 
                     float w = UnpackHalf( bytes );
@@ -265,10 +265,10 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
                 }
                 else if( info.type == 12 ) //Float2, 2 float values.
                 {
-                    float x = ReadFloat( mdbBytes, vertPos, true );
+                    float x = ReadFloat( &mdbBytes, vertPos, true );
                     vertPos += 0x4;
 
-                    float y = ReadFloat( mdbBytes, vertPos, true );
+                    float y = ReadFloat( &mdbBytes, vertPos, true );
                     vertPos += 0x4;
 
                     //Todo: Store this properly, this is a temporary solution.

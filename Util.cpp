@@ -40,12 +40,12 @@ int ReadInt( std::vector<char> buf, int pos, bool flipBytes )
 }
 
 //Read half int (short) from byte buffer
-short ReadShort( std::vector<char> buf, int pos )
+short ReadShort( std::vector<char> *buf, int pos )
 {
     unsigned char chunk[2];
 
-	chunk[0] = buf[ pos ];
-	chunk[1] = buf[ pos + 1 ];
+	chunk[0] = buf->at( pos );
+	chunk[1] = buf->at( pos + 1 );
 
 	short num;
     memcpy( &num, chunk, sizeof( short ) );
@@ -54,23 +54,23 @@ short ReadShort( std::vector<char> buf, int pos )
 }
 
 //Read Floating Point from byte buffer
-float ReadFloat( std::vector<char> buf, int pos, bool reverseBytes )
+float ReadFloat( std::vector<char> *buf, int pos, bool reverseBytes )
 {
     unsigned char chunk[4];
 
     if( !reverseBytes )
     {
-        chunk[3] = buf[ pos ];
-        chunk[2] = buf[ pos + 1 ];
-        chunk[1] = buf[ pos + 2 ];
-        chunk[0] = buf[ pos + 3 ];
+        chunk[3] = buf->at( pos );
+        chunk[2] = buf->at( pos + 1 );
+        chunk[1] = buf->at( pos + 2 );
+        chunk[0] = buf->at( pos + 3 );
     }
     else
     {
-        chunk[0] = buf[ pos ];
-	    chunk[1] = buf[ pos + 1 ];
-	    chunk[2] = buf[ pos + 2 ];
-	    chunk[3] = buf[ pos + 3 ];
+        chunk[0] = buf->at( pos );
+	    chunk[1] = buf->at( pos + 1 );
+	    chunk[2] = buf->at( pos + 2 );
+	    chunk[3] = buf->at( pos + 3 );
     }
 
     float val;

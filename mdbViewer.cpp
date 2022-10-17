@@ -15,7 +15,9 @@
 
 #include "MDBParser.h"
 
-GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path)
+//Most of this code is Shamelessly stolen from an opengl tutorial.
+//Load shadersfrom file paths
+GLuint LoadShaders( const char * vertex_file_path, const char * fragment_file_path )
 {
 	// Create the shaders
 	GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
@@ -110,12 +112,12 @@ GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path
 	return ProgramID;
 }
 
-//Shamelessly stolen from an opengl tutorial.
 #define FOURCC_DXT1 0x31545844 // Equivalent to "DXT1" in ASCII
 #define FOURCC_DXT3 0x33545844 // Equivalent to "DXT3" in ASCII
 #define FOURCC_DXT5 0x35545844 // Equivalent to "DXT5" in ASCII
 
-GLuint loadDDS(const char * imagepath)
+//Loads a DDS texture for OpenGL use,
+GLuint LoadDDS(const char * imagepath)
 {
 	unsigned char header[124];
 
@@ -208,7 +210,8 @@ GLuint loadDDS(const char * imagepath)
 	return textureID;
 }
 
-GLuint loadDDS_FromBuffer( std::vector< char > byteBuf )
+//Loads a DDS texture for OpenGL use, Reimplementation that uses a char buffer as a "file".
+GLuint LoadDDS_FromBuffer( std::vector< char > byteBuf )
 {
 	unsigned char header[124];
 
@@ -313,10 +316,12 @@ public:
     glm::mat4 View;
 };
 
+//A simple mesh object rendering system.
 class MeshObject
 {
 public:
-    MeshObject( std::vector< glm::vec3 > verts, std::vector< unsigned int > ind, std::vector< glm::vec2 > uv, GLuint shader )
+	//Constructor.
+    MeshObject( std::vector< glm::vec3 > verts, std::vector< unsigned int > ind, std::vector< glm::vec2 > uv, GLuint shader, GLuint tex )
     {
         //Fill in data:
         vertices = verts;
@@ -325,7 +330,8 @@ public:
         shaderID = shader;
 
         //Load Texture:
-        Texture = loadDDS( "texture1.dds" );
+        Texture = tex;
+
         // Get a handle for our "myTextureSampler" uniform
 	    TextureID = glGetUniformLocation(shaderID, "myTextureSampler");
 
@@ -368,6 +374,18 @@ public:
         angles = glm::vec3( 0, 0, 0 );
     };
 
+	//Destructor. TODO: Clean up memory and OPENGL states here.
+	~MeshObject()
+	{
+		//At least purge our mesh vectors.
+		vertices.clear();
+		uvs.clear();
+		indices.clear();
+
+		
+	};
+
+	//Render the mesh using a specified camera.
     void Draw( Camera cam )
     {
         //Create model matrix from transforms.
@@ -460,9 +478,230 @@ public:
     glm::vec3 scale;
 };
 
+//Todo: Implement this so that we can draw lines in 3D space.
+class CDebugLines
+{
+	public:
+
+	protected:
+
+};
+
+//Todo: Primitive renderers for if we implement RMPA node viewing?
+
 #include <SFML/Graphics.hpp>
 
 #include "RAB.h"
+#include <filesystem>
+
+//Tool state system, will allow the tool to have multiple "screens", IE, a file browser, that it can swap between
+class BaseToolState
+{
+public:
+	BaseToolState(){};
+
+	virtual void Init( sf::RenderWindow *iwindow )
+	{
+		window = iwindow;
+	};
+	virtual void ProccessEvent( sf::Event event ){};
+	virtual void Draw(){};
+
+protected:
+	sf::RenderWindow *window;
+};
+
+//Tool state is in "Model Renderer"
+class CStateModelRenderer : public BaseToolState
+{
+	public:
+	CStateModelRenderer(){};
+	
+	void Init( sf::RenderWindow *iwindow )
+	{
+		window = iwindow;
+
+		//Init OPENGL related stuff;
+    	MDBReader reader( "model2.mdb" ); //Todo: Memory management.
+
+		//Todo: Reference font in some kind of common way.
+    	font.loadFromFile( "Font.ttf" );
+
+		//Text information about the viewer
+		std::wstring strObjName = reader.model.names[ reader.model.objects[0].nameindex ];
+		std::wstring strMeshInfo = L"Mesh 1 of " + std::to_wstring( reader.model.objects[0].meshcount );
+		std::wstring strVertexInfo = L"Number of vertices: " + std::to_wstring( reader.model.objects[0].meshs[0].vertexnumber );
+
+		text = sf::Text( L"Displaying: " + strObjName + L"\n" + strMeshInfo + L"\n" + strVertexInfo, font, 20u );
+		text.setFillColor( sf::Color( 0, 255, 0 ) );
+		text.setPosition( sf::Vector2f( 5, 5 ) );
+
+		strReadoutText = "Rendering 1 Mesh at position:";
+		meshObjReadoutText = sf::Text( strReadoutText, font, 15U );
+		meshObjReadoutText.setFillColor( sf::Color( 255, 0, 0 ) );
+		meshObjReadoutText.setPosition( sf::Vector2f( 5, 600-15-5 ) );
+
+		//Enable Culling
+		glEnable(GL_CULL_FACE);
+		glFrontFace(GL_CCW);
+		
+		// Create and compile our GLSL program from the shaders
+		GLuint programID = LoadShaders( "SimpleVertexShader.txt", "SimpleTexturedFragShader.txt" ); //Todo: Common rendering library?
+		GLuint shader_Untextured = LoadShaders( "SimpleVertexShader.txt", "SimpleFragmentShader.txt" );
+
+		mesh = std::make_unique<MeshObject>( reader.test, reader.test2, reader.uvs, programID, LoadDDS("texture1.dds") ); //Todo: Perhaps use new/pointers/ect.
+		
+		//mesh.Texture = loadDDS_FromBuffer( modelArc.ReadFile( L"HD-TEXTURE", reader.model.textures[0].filename ) );
+		//MeshObject mesh2( reader.test, reader.test2, reader.uvs, programID );
+		//mesh.shaderID = programID;
+
+		// Enable depth test
+		glEnable(GL_DEPTH_TEST);
+		// Accept fragment if it closer to the camera than the former one
+		glDepthFunc(GL_LEQUAL);
+	};
+
+	void ProccessEvent( sf::Event event )
+	{
+		if( event.type == sf::Event::Resized )
+		{
+			// adjust the viewport when the window is resized
+			glViewport(0, 0, event.size.width, event.size.height);
+		}
+		else if( event.type == sf::Event::KeyPressed ) //Temp:
+		{
+			if( event.key.code == sf::Keyboard::Right )
+			{
+				mesh->angles.y += 0.01;
+			}
+		}
+	}
+
+	void Draw()
+	{
+		// Projection matrix : 45° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
+        cam.Projection = glm::perspective( glm::radians(45.0f), (float)800 / (float)600, 0.1f, 100.0f );
+        
+        // Camera matrix
+        cam.View = glm::lookAt(
+            glm::vec3(2,0,0), // Camera position, in World Space
+            glm::vec3(0,0,0), // Camera Look At position
+            glm::vec3(0,1,0)  // Head is up (set to 0,-1,0 to look upside-down)
+            );
+        
+        strReadoutText = "Rendering 1 Mesh at position: " + std::to_string( mesh->position.x ) + ", " +
+        std::to_string( mesh->position.y ) + ", " + std::to_string( mesh->position.z );
+        meshObjReadoutText.setString( strReadoutText );
+
+        window->clear();
+
+        glClear( GL_DEPTH_BUFFER_BIT );
+
+        //Turn on wireframe mode
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        
+        mesh->Draw(cam);
+
+        //Turn off wireframe mode
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+		glUseProgram(0);
+
+        window->pushGLStates();
+        window->draw( text );
+        window->draw( meshObjReadoutText );
+        window->popGLStates();
+    
+        window->display();
+	}
+
+	protected:
+	//Renderables:
+	sf::Font font;
+	sf::Text text;
+	sf::Text meshObjReadoutText;
+	std::unique_ptr<MeshObject> mesh;
+
+	//Variables:
+	std::string strReadoutText;
+	GLuint programID;
+	GLuint shader_Untextured;
+	Camera cam;
+};
+
+//Tool state is in "File Browser"
+class CStateFileBrowser : public BaseToolState
+{
+public:
+	void Init( sf::RenderWindow *iwindow )
+	{
+		window = iwindow;
+
+    	font.loadFromFile( "Font.ttf" );
+
+		path = "./";
+
+		PopulateTexts();
+	};
+	void ProccessEvent( sf::Event event )
+	{
+		if( event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Button::Left )
+		{
+			for( int i = 1; i < texts.size(); ++i )
+			{
+				if( texts[i].getGlobalBounds().contains( sf::Vector2f( sf::Mouse::getPosition( *window ) ) ) )
+				{
+					std::string newpath;
+					newpath = texts[i].getString();
+
+					if( std::filesystem::is_directory( newpath ) )
+					{
+						path = newpath;
+						PopulateTexts();
+					}
+				}
+			}
+		}
+	};
+	void Draw()
+	{
+		window->clear();
+		for( int i = 0; i < texts.size(); ++i )
+		{
+			if( i > 0 && texts[i].getGlobalBounds().contains( sf::Vector2f( sf::Mouse::getPosition( *window ) ) ) )
+				texts[i].setFillColor( sf::Color( 255, 0, 0 ) );
+			else
+				texts[i].setFillColor( sf::Color( 0, 255, 0 ) );
+			window->draw(texts[i]);
+		}
+		window->display();
+	};
+protected:
+
+	void PopulateTexts()
+	{
+		texts.clear();
+
+		sf::Text headerText = sf::Text( "DIRECTORY:", font, 20u );
+		headerText.setFillColor( sf::Color( 0, 255, 0 ) );
+		headerText.setPosition( sf::Vector2f( 5, 5 ) );
+
+		texts.push_back( headerText );
+
+		for( const auto & entry : std::filesystem::directory_iterator( path ) )
+		{
+			sf::Text text = sf::Text( entry.path().c_str(), font, 20u );
+			text.setFillColor( sf::Color( 0, 255, 0 ) );
+			text.setPosition( sf::Vector2f( 5, texts.back().getGlobalBounds().top + texts.back().getGlobalBounds().height ) );
+
+			texts.push_back( text );
+		}
+	}
+
+	sf::Font font;
+	std::vector< sf::Text > texts;
+	std::string path;
+};
 
 int main()
 {
@@ -470,10 +709,11 @@ int main()
 
     //RABReader modelArc( "AIRTORTOISE_MISSILE.RAB" );
 
-    MDBReader reader( "model2.mdb" );
+    //MDBReader reader( "model2.mdb" );
     //MDBReader reader( modelArc.ReadFile( L"MODEL", L"airtortoise_missile.mdb" ) );
 
     //return 0;
+	
 
     //SFML Setup.
     sf::ContextSettings settings;
@@ -485,42 +725,9 @@ int main()
 
     sf::RenderWindow window( sf::VideoMode(800, 600), "MDB Viewer", sf::Style::Default, settings );
 
-    sf::Font font;
-    font.loadFromFile( "Font.ttf" );
-
-    //Text information about the viewer
-    std::wstring strObjName = reader.model.names[ reader.model.objects[0].nameindex ];
-    std::wstring strMeshInfo = L"Mesh 1 of " + std::to_wstring( reader.model.objects[0].meshcount );
-    std::wstring strVertexInfo = L"Number of vertices: " + std::to_wstring( reader.model.objects[0].meshs[0].vertexnumber );
-
-    sf::Text text = sf::Text( L"Displaying: " + strObjName + L"\n" + strMeshInfo + L"\n" + strVertexInfo, font, 20u );
-    text.setFillColor( sf::Color( 0, 255, 0 ) );
-    text.setPosition( sf::Vector2f( 5, 5 ) );
-
-    std::string strReadoutText = "Rendering 1 Mesh at position:";
-    sf::Text meshObjReadoutText( strReadoutText, font, 15U );
-    meshObjReadoutText.setFillColor( sf::Color( 255, 0, 0 ) );
-    meshObjReadoutText.setPosition( sf::Vector2f( 5, 600-15-5 ) );
-
-    //Enable Culling
-    glEnable(GL_CULL_FACE);
-    glFrontFace(GL_CCW);
-    
-    // Create and compile our GLSL program from the shaders
-    GLuint programID = LoadShaders( "SimpleVertexShader.txt", "SimpleTexturedFragShader.txt" );
-    GLuint shader_Untextured = LoadShaders( "SimpleVertexShader.txt", "SimpleFragmentShader.txt" );
-
-    Camera cam;
-
-    MeshObject mesh( reader.test, reader.test2, reader.uvs, programID );
-    //mesh.Texture = loadDDS_FromBuffer( modelArc.ReadFile( L"HD-TEXTURE", reader.model.textures[0].filename ) );
-    //MeshObject mesh2( reader.test, reader.test2, reader.uvs, programID );
-    //mesh.shaderID = programID;
-
-    // Enable depth test
-    glEnable(GL_DEPTH_TEST);
-    // Accept fragment if it closer to the camera than the former one
-    glDepthFunc(GL_LEQUAL);
+	//Create states:
+	std::unique_ptr< BaseToolState > state = std::make_unique< CStateModelRenderer >( ); //Might not need unique_ptr here.
+	state->Init( &window ); //Feed the state a ptr to the sf window and initialise.
 
     //MAIN LOOP
     while (window.isOpen())
@@ -530,55 +737,14 @@ int main()
         {
             if( event.type == sf::Event::Closed )
                 window.close();
-            else if( event.type == sf::Event::Resized )
-            {
-                // adjust the viewport when the window is resized
-                glViewport(0, 0, event.size.width, event.size.height);
-            }
-            else if( event.type == sf::Event::KeyPressed )
-            {
-                if( event.key.code == sf::Keyboard::Right )
-                {
-                    mesh.angles.y += 0.01;
-                }
-            }
+            
+			state->ProccessEvent( event );
         }
 
-        // Projection matrix : 45° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-        cam.Projection = glm::perspective(glm::radians(45.0f), (float)800 / (float)600, 0.1f, 100.0f);
-        
-        // Camera matrix
-        cam.View = glm::lookAt(
-            glm::vec3(2,0,0), // Camera is at (4,3,3), in World Space
-            glm::vec3(0,0,0), // and looks at the origin
-            glm::vec3(0,1,0)  // Head is up (set to 0,-1,0 to look upside-down)
-            );
-        
-        strReadoutText = "Rendering 1 Mesh at position: " + std::to_string( mesh.position.x ) + ", " +
-        std::to_string( mesh.position.y ) + ", " + std::to_string( mesh.position.z );
-        meshObjReadoutText.setString( strReadoutText );
-
-        window.clear();
-
-        glClear( GL_DEPTH_BUFFER_BIT );
-
-        //Turn on wireframe mode
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        
-        mesh.Draw(cam);
-
-        //Turn off wireframe mode
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-		glUseProgram(0);
-
-        window.pushGLStates();
-        window.draw( text );
-        window.draw( meshObjReadoutText );
-        window.popGLStates();
-    
-        window.display();
+        state->Draw(); //Todo: Place common draw steps before and after state.
     }
+
+	//Erase states, calling deconstructors.
 
     //Todo: Nicely clean up OpenGL and other such memory.
 

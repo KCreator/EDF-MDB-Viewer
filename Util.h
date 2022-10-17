@@ -4,10 +4,10 @@
 int ReadInt( std::vector<char> buf, int pos, bool flipBytes = false );
 
 //Read half int (short) from byte buffer
-short ReadShort( std::vector<char> buf, int pos );
+short ReadShort( std::vector<char> *buf, int pos );
 
 //Read Floating Point from byte buffer
-float ReadFloat( std::vector<char> buf, int pos, bool reverseBytes = false );
+float ReadFloat( std::vector<char> *buf, int pos, bool reverseBytes = false );
 
 //Read a unicode wide string from byte buffer
 std::wstring ReadUnicode( std::vector<char> chunk, int pos, bool swapEndian );

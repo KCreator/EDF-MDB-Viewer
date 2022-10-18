@@ -25,13 +25,7 @@ struct MDBVertexLayoutInfo
 //TODO: Store exctracted vertices using this structure?
 struct MDBVertexData
 {
-
-};
-
-//Todo: Should use this, somehow.
-struct MDBIndiceData
-{
-
+    
 };
 
 //Mesh information structure, Holds data related to an object's mesh
@@ -45,9 +39,10 @@ struct MDBMeshInfo
     short layoutcount;
     int vertexnumber;
     int meshindex;
-    MDBVertexData vertexdata;
+    std::map< std::string, std::vector< float > > vertexdata;
+    //MDBVertexData vertexdata;
     int indicesnumber;
-    MDBIndiceData indicedata;
+    std::vector< unsigned int > indicedata; //Technically supposed to be a short.
 };
 
 //Object Structure, Holds data related to an Object in the MDB
@@ -59,14 +54,27 @@ struct MDBObject
     std::vector<MDBMeshInfo> meshs;
 };
 
+struct MDBBone
+{
+    int boneIndex;
+    int boneParent;
+    int unk0;
+    int unk1;
+    int unk2;
+    //Transformation matrix.
+};
+
 //The main MDB storage structure, holds all data extracted from the file.
 struct MDB
 {
     int namescount;
     std::vector<std::wstring> names;
 
+    int bonescount;
+    std::vector<MDBBone> bones;
+
     int objectscount;
-    std::vector<MDBObject> objects;    
+    std::vector<MDBObject> objects;
 
     int texturescount;
     std::vector< MDBTexture > textures;
@@ -79,13 +87,19 @@ struct MDB
 class MDBReader
 {
 public:
+    //Constructor
     MDBReader( const char* path );  //From file
     MDBReader( std::vector< char > bytes ); //From bytes
 
+    //Accessors
+    //TODO: This probably should just be a generic type, as the MDB reader component should be self contained.
+    std::vector< glm::vec3 > GetMeshPositionVertices( int objNum, int meshNum );
+
+    std::vector< unsigned int > GetMeshIndices( int objNum, int meshNum );
+
     //Temp:
-    std::vector< glm::vec3 > test;
-    std::vector< glm::vec2 > uvs;
-    std::vector< unsigned int > test2;
+    std::vector< glm::vec2 > uvs; //This needs to go ASAP
+    //std::vector< glm::vec3 > bonepos;
 
     //The model data itself.
     MDB model;

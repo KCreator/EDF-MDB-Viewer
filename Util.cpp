@@ -10,23 +10,23 @@
 #include "Util.h"
 
 //Read Integer from byte buffer
-int ReadInt( std::vector<char> buf, int pos, bool flipBytes )
+int ReadInt( std::vector<char> *buf, int pos, bool flipBytes )
 {
     unsigned char chunk[4];
 
 	if( flipBytes )
 	{
-		chunk[0] = buf[ pos ];
-		chunk[1] = buf[ pos + 1 ];
-		chunk[2] = buf[ pos + 2 ];
-		chunk[3] = buf[ pos + 3 ];
+		chunk[0] = buf->at( pos );
+		chunk[1] = buf->at( pos + 1 );
+		chunk[2] = buf->at( pos + 2 );
+		chunk[3] = buf->at( pos + 3 );
 	}
 	else
 	{
-		chunk[3] = buf[ pos ];
-		chunk[2] = buf[ pos + 1 ];
-		chunk[1] = buf[ pos + 2 ];
-		chunk[0] = buf[ pos + 3 ];
+		chunk[3] = buf->at( pos );
+		chunk[2] = buf->at( pos + 1 );
+		chunk[1] = buf->at( pos + 2 );
+		chunk[0] = buf->at( pos + 3 );
 	}
 
 	int num = 0;
@@ -79,9 +79,9 @@ float ReadFloat( std::vector<char> *buf, int pos, bool reverseBytes )
 }
 
 //Read a unicode wide string from byte buffer
-std::wstring ReadUnicode( std::vector<char> chunk, int pos, bool swapEndian )
+std::wstring ReadUnicode( std::vector<char> *chunk, int pos, bool swapEndian )
 {
-	if( pos > chunk.size( ) )
+	if( pos > chunk->size( ) )
 		return L"";
 
 	unsigned int bufPos = pos;
@@ -91,10 +91,10 @@ std::wstring ReadUnicode( std::vector<char> chunk, int pos, bool swapEndian )
     std::wstring_convert<std::codecvt_utf8<wchar_t>,wchar_t> convert;
 
 	//Repeat until EOF, or otherwise broken
-	while( bufPos < chunk.size() )
+	while( bufPos < chunk->size() )
 	{
-		c[0] = chunk[bufPos];
-		c[1] = chunk[bufPos+1];
+		c[0] = chunk->at(bufPos);
+		c[1] = chunk->at(bufPos+1);
 
         if( c[0] == 0x0 && c[1] == 0x0 )
          break;
@@ -108,21 +108,21 @@ std::wstring ReadUnicode( std::vector<char> chunk, int pos, bool swapEndian )
 }
 
 //Read ASCII string from byte buffer
-std::string ReadASCII( std::vector<char> chunk, int pos )
+std::string ReadASCII( std::vector<char> *chunk, int pos )
 {
-    if( pos > chunk.size( ) )
+    if( pos > chunk->size( ) )
 		return "";
 
 	unsigned int bufPos = pos;
     std::string strn;
 
     //Repeat until EOF, or otherwise broken
-	while( bufPos < chunk.size() )
+	while( bufPos < chunk->size() )
 	{
-        if( chunk[bufPos] == 0x0)
+        if( chunk->at(bufPos) == 0x0)
         break;
 
-        strn += chunk[bufPos];
+        strn += chunk->at(bufPos);
         bufPos++;
     }
 

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <map>
 #include <string.h>
 #include <codecvt>
 #include <locale>
@@ -59,39 +60,86 @@ void MDBReader::Parse( )
     int pos = 0x8;
 
     //Read header:
-    model.namescount = ReadInt( mdbBytes, pos );
-    int iNameTableOffs = ReadInt( mdbBytes, pos + 4 );
+    model.namescount = ReadInt( &mdbBytes, pos );
+    int iNameTableOffs = ReadInt( &mdbBytes, pos + 4 );
 
-    model.objectscount = ReadInt( mdbBytes, 0x18 );
-    int iObjectTableOff = ReadInt( mdbBytes, 0x1C );
+    model.bonescount = ReadInt( &mdbBytes, 0x10 );
+    int iBoneOffs = ReadInt( &mdbBytes, 0x14 );
+
+    model.objectscount = ReadInt( &mdbBytes, 0x18 );
+    int iObjectTableOffs = ReadInt( &mdbBytes, 0x1C );
 
     //Read tables:
     ReadNameTable( iNameTableOffs );
 
+    //Read bones
+    pos = iBoneOffs;
+    for( int i = 0; i < model.bonescount ; ++i )
+    {
+        MDBBone bone;
+
+        //Bone Index
+        bone.boneIndex = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        std::wcout << L"Bone? " + model.names[ bone.boneIndex ] + L"\n";
+
+        //Bone Parent
+        bone.boneParent = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        //Currently unknown x3
+        bone.unk0 = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        bone.unk1 = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        bone.unk2 = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        pos += 12;
+
+        //Bone transformations
+        pos += 0x40;
+        pos += 0x40;
+
+        //TEMP
+        //float x = ReadFloat( &mdbBytes, pos, true );
+        //float y = ReadFloat( &mdbBytes, pos + 4, true );
+        //float z = ReadFloat( &mdbBytes, pos + 8, true );
+        //float w = ReadFloat( &mdbBytes, pos + 12, true );
+        //bonepos.push_back( glm::vec3( x, y ,z ) );
+
+        //UNK
+        pos += 0x10;
+        pos += 0x10;
+    }
+
     //Read Object Tables
-    pos = iObjectTableOff;
+    pos = iObjectTableOffs;
     for( int i = 0; i < model.objectscount ; ++i )
     {
         MDBObject obj;
 
         //Object Index
-        obj.index = ReadInt( mdbBytes, pos );
+        obj.index = ReadInt( &mdbBytes, pos );
         pos += 4;
 
         //Object Name Index
-        obj.nameindex = ReadInt( mdbBytes, pos );
+        obj.nameindex = ReadInt( &mdbBytes, pos );
         pos += 4;
 
         //Object Mesh Count
-        obj.meshcount = ReadInt( mdbBytes, pos );
+        obj.meshcount = ReadInt( &mdbBytes, pos );
         pos += 4;
 
         //Object Mesh Offset
-        int meshOfs = ReadInt( mdbBytes, pos );
+        int meshOfs = ReadInt( &mdbBytes, pos );
         pos += 4;
 
         //Read Mesh Info:
-        int meshpos = iObjectTableOff + meshOfs;
+        int meshpos = iObjectTableOffs + meshOfs;
 
         ReadMeshInfo( obj, meshpos );
 
@@ -99,8 +147,8 @@ void MDBReader::Parse( )
         model.objects.push_back(obj);
     }
 
-    model.texturescount = ReadInt( mdbBytes, 0x28 );
-    int textureOffs= ReadInt( mdbBytes, 0x2C );
+    model.texturescount = ReadInt( &mdbBytes, 0x28 );
+    int textureOffs= ReadInt( &mdbBytes, 0x2C );
 
     //Read texture offset:
     pos = textureOffs;
@@ -111,19 +159,19 @@ void MDBReader::Parse( )
         MDBTexture texture;
 
         //Texture Index:
-        texture.index = ReadInt( mdbBytes, pos );
+        texture.index = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Texture Name;
-        texture.name = ReadUnicode( mdbBytes, base + ReadInt( mdbBytes, pos ), false );
+        texture.name = ReadUnicode( &mdbBytes, base + ReadInt( &mdbBytes, pos ), false );
         pos += 0x4;
 
         //Texture Filename        
-        texture.filename = ReadUnicode( mdbBytes, base + ReadInt( mdbBytes, pos ), false );
+        texture.filename = ReadUnicode( &mdbBytes, base + ReadInt( &mdbBytes, pos ), false );
         pos += 0x4;
 
         //Unknown (Always Zero )
-        texture.UNK0 = ReadInt( mdbBytes, pos );
+        texture.UNK0 = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         model.textures.push_back( texture );
@@ -141,10 +189,10 @@ void MDBReader::ReadNameTable( int nametableoffs )
     for( int i = 0; i < model.namescount ; ++i )
     {
         //Get the offset to the string
-        int ofs = ReadInt( mdbBytes, pos );
+        int ofs = ReadInt( &mdbBytes, pos );
         if( ofs != 0 ) //We need to check this, to fill the name table with "Empty" should be be empty.
         {
-            model.names.push_back( ReadUnicode( mdbBytes, pos + ofs, false ) ); //Add to names array
+            model.names.push_back( ReadUnicode( &mdbBytes, pos + ofs, false ) ); //Add to names array
         }
         else
             model.names.push_back( L"empty" );
@@ -165,19 +213,19 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         MDBMeshInfo mesh;
 
         //Skin data TODO: Parse this properly.
-        mesh.skindata = ReadInt( mdbBytes, pos );
+        mesh.skindata = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Material
-        mesh.material = ReadInt( mdbBytes, pos );
+        mesh.material = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Unknown (Always zero?)
-        mesh.UNK0 = ReadInt( mdbBytes, pos );
+        mesh.UNK0 = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Offset to Vertex Layout Info
-        int vertexLayoutInfoOffs = ReadInt( mdbBytes, pos );
+        int vertexLayoutInfoOffs = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Size of vertices:
@@ -192,23 +240,23 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         ReadVertexLayoutInfo( mesh, base + vertexLayoutInfoOffs );
 
         //Number of vertices
-        mesh.vertexnumber = ReadInt( mdbBytes, pos );
+        mesh.vertexnumber = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Mesh Index
-        mesh.meshindex = ReadInt( mdbBytes, pos );
+        mesh.meshindex = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Offset to Vertex Data
-        int vertexDataOffs = ReadInt( mdbBytes, pos );
+        int vertexDataOffs = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Number of Indices
-        mesh.indicesnumber = ReadInt( mdbBytes, pos );
+        mesh.indicesnumber = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Offset to Index Data
-        int IndexDataInfoOffs = ReadInt( mdbBytes, pos );
+        int IndexDataInfoOffs = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Parse index data:
@@ -216,7 +264,8 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         for( int v = 0; v < mesh.indicesnumber; ++v )
         {
             short data = ReadShort( &mdbBytes, indPos );
-            test2.push_back( data );
+            mesh.indicedata.push_back( data );
+            //test2.push_back( data );
             indPos += 0x2;
         }
 
@@ -229,15 +278,15 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
             {
                 MDBVertexLayoutInfo info = mesh.vertexinfo[vi];
 
-                if( info.type == 1 )
+                if( info.type == 1 ) //Float4 (16 bytes)
                 {
                     vertPos += 16;
                 }
-                else if( info.type == 4 )
+                else if( info.type == 4 ) //Float3 (12 bytes)
                 {
                     vertPos += 12;
                 }
-                else if( info.type == 7 ) //array of 4 half floats
+                else if( info.type == 7 ) //array of 4 half floats (8 bytes)
                 {
                     short bytes = ReadShort( &mdbBytes, vertPos );
                     vertPos += 0x2;
@@ -259,11 +308,14 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
 
                     float w = UnpackHalf( bytes );
 
-                    //Todo: Store this properly, this is a temporary solution.
-                    if( mesh.vertexinfo[ vi ].name == "position" )
-                        test.push_back( glm::vec3( x, y, z ));
+                    //Store to our vertexData map.
+                    std::string vertexName = mesh.vertexinfo[ vi ].name + std::to_string( mesh.vertexinfo[ vi ].channel );
+                    mesh.vertexdata[ vertexName ].push_back( x );
+                    mesh.vertexdata[ vertexName ].push_back( y );
+                    mesh.vertexdata[ vertexName ].push_back( z );
+                    mesh.vertexdata[ vertexName ].push_back( w );
                 }
-                else if( info.type == 12 ) //Float2, 2 float values.
+                else if( info.type == 12 ) //Float2, 2 float values. (8 bytes)
                 {
                     float x = ReadFloat( &mdbBytes, vertPos, true );
                     vertPos += 0x4;
@@ -271,11 +323,16 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
                     float y = ReadFloat( &mdbBytes, vertPos, true );
                     vertPos += 0x4;
 
+                    //Store to our vertexData map.
+                    std::string vertexName = mesh.vertexinfo[ vi ].name + std::to_string( mesh.vertexinfo[ vi ].channel );
+                    mesh.vertexdata[ vertexName ].push_back( x );
+                    mesh.vertexdata[ vertexName ].push_back( y );
+
                     //Todo: Store this properly, this is a temporary solution.
                     if( mesh.vertexinfo[ vi ].name == "texcoord" )
                         uvs.push_back( glm::vec2( x, y ) );
                 }
-                if( info.type == 21 )
+                if( info.type == 21 ) //ubyte4 (4 bytes)
                 {
                     vertPos += 4;
                 }
@@ -297,25 +354,67 @@ void MDBReader::ReadVertexLayoutInfo( MDBMeshInfo &mesh, int position )
         MDBVertexLayoutInfo info;
 
         //Vertex Type
-        info.type = ReadInt( mdbBytes, pos );
+        info.type = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Offset in vertex data
-        info.offset = ReadInt( mdbBytes, pos );
+        info.offset = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Channel
-        info.channel = ReadInt( mdbBytes, pos );
+        info.channel = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Name
-        int nameOffs = ReadInt( mdbBytes, pos );
+        int nameOffs = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Read Name:
-        info.name = ReadASCII( mdbBytes, base + nameOffs );
+        info.name = ReadASCII( &mdbBytes, base + nameOffs );
 
         mesh.vertexinfo.push_back( info );
     }
 }
 
+//Accessors.
+std::vector< glm::vec3 > MDBReader::GetMeshPositionVertices( int objNum, int meshNum )
+{
+    std::vector< glm::vec3 > returnValue;
+
+    //Check if in bounds:
+    if( objNum > model.objectscount )
+        return returnValue;
+
+    if( meshNum > model.objects[objNum].meshcount )
+        return returnValue;
+
+    //Access relevant vector and translate to vertex vec3
+    MDBMeshInfo *mesh = &model.objects[objNum].meshs[meshNum];
+    for( int i = 0; i < mesh->vertexdata[ "position0" ].size(); i += 4 ) //This should be fine in most cases. However, I should test for "type"
+    {
+        float x = mesh->vertexdata[ "position0" ][i];
+        float y = mesh->vertexdata[ "position0" ][i+1];
+        float z = mesh->vertexdata[ "position0" ][i+2];
+
+        returnValue.push_back( glm::vec3( x, y, z ) );
+    }
+
+    return returnValue;
+}
+
+//A nicer way to get mesh indices.
+std::vector< unsigned int > MDBReader::GetMeshIndices( int objNum, int meshNum )
+{
+    std::vector< unsigned int > returnValue;
+
+    //Check if in bounds:
+    if( objNum > model.objectscount )
+        return returnValue;
+
+    if( meshNum > model.objects[objNum].meshcount )
+        return returnValue;
+
+    returnValue = model.objects[objNum].meshs[meshNum].indicedata;
+
+    return returnValue;
+}

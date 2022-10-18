@@ -27,7 +27,7 @@ std::vector< char > CMPLDecompress( std::vector< char > data )
 
 	int bufPos;
 
-	int desiredSize = ReadInt( data, 4, true );
+	int desiredSize = ReadInt( &data, 4, true );
 
 	int streamPos = 8;
 
@@ -121,22 +121,22 @@ RABReader::RABReader( const char *path )
 		//Begin read
 		int pos;
 
-		dataStartOfs = ReadInt( buffer, 0x8 ); //Data starting offset
+		dataStartOfs = ReadInt( &buffer, 0x8 ); //Data starting offset
 
-		numFiles = ReadInt( buffer, 0x14 ); //Number of archived files
+		numFiles = ReadInt( &buffer, 0x14 ); //Number of archived files
 
-		fileTreeStructPos = ReadInt( buffer, 0x1c ); //File tree structure position
+		fileTreeStructPos = ReadInt( &buffer, 0x1c ); //File tree structure position
 
-		numFolders = ReadInt( buffer, 0x20 ); //Number of folders.
+		numFolders = ReadInt( &buffer, 0x20 ); //Number of folders.
 
-		nameTablePos = ReadInt( buffer, 0x24 ); //Offset to name table
+		nameTablePos = ReadInt( &buffer, 0x24 ); //Offset to name table
 
 		//Read folders:
 		pos = nameTablePos;
 
 		for( int i = 0; i < numFolders; ++i )
 		{
-			folders.push_back( ReadUnicode( buffer, pos + ReadInt( buffer, pos ), false ) );
+			folders.push_back( ReadUnicode( &buffer, pos + ReadInt( &buffer, pos ), false ) );
 
 			pos += 0x4;
 		}
@@ -145,13 +145,13 @@ RABReader::RABReader( const char *path )
 		pos = 0x28;
 		for( int i = 0; i < numFiles; ++i )
 		{
-			std::wstring fileName = ReadUnicode( buffer, pos + ReadInt( buffer, pos ), false );
+			std::wstring fileName = ReadUnicode( &buffer, pos + ReadInt( &buffer, pos ), false );
 			pos += 0x4;
 
-			int fileSize = ReadInt( buffer, pos );
+			int fileSize = ReadInt( &buffer, pos );
 			pos += 0x4;
 
-			std::wstring folderName = folders.at( ReadInt( buffer, pos ) );
+			std::wstring folderName = folders.at( ReadInt( &buffer, pos ) );
 			pos += 0x4;
 
 			//???
@@ -191,7 +191,7 @@ RABReader::RABReader( const char *path )
 			//std::wcout << L"--FILE TIME: " + fileTimeString + L"\n";
 			pos += 0x4;
 
-			int fileStart = ReadInt( buffer, pos );
+			int fileStart = ReadInt( &buffer, pos );
 			pos += 0x4;
 
 			//Unknown block:

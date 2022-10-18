@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <map>
 #include <string.h>
 #include <codecvt>
 #include <locale>
@@ -382,7 +383,11 @@ public:
 		uvs.clear();
 		indices.clear();
 
-		
+		//Delete vertex arrays and buffers
+		glDeleteVertexArrays(1, &VAO);
+        glDeleteBuffers(1, &VBO);
+		glDeleteBuffers(1, &EBO);
+        glDeleteBuffers(1, &UVBuffer);
 	};
 
 	//Render the mesh using a specified camera.
@@ -406,7 +411,7 @@ public:
 
         // Get a handle for our "MVP" uniform
         // Only during the initialisation
-        GLuint MatrixID = glGetUniformLocation(shaderID, "MVP");
+        GLuint MatrixID = glGetUniformLocation( shaderID, "MVP" );
         
         // Send our transformation to the currently bound shader, in the "MVP" uniform
         // This is done in the main loop since each model will have a different MVP matrix (At least for the M part)
@@ -479,12 +484,98 @@ public:
 };
 
 //Todo: Implement this so that we can draw lines in 3D space.
-class CDebugLines
+//Ugly little debug line renderer.
+class CDebugLine
 {
 	public:
+	CDebugLine( glm::vec3 pointA, glm::vec3 pointB, glm::vec3 colour )
+	{
+		//Hardcoded shaders. Ideally we would move all this junk somewhere else.
+		const char *vertexShaderSource = "#version 330 core\n"
+            "layout (location = 0) in vec3 aPos;\n"
+            "uniform mat4 MVP;\n"
+            "void main()\n"
+            "{\n"
+            "   gl_Position = MVP * vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+            "}\0";
+        const char *fragmentShaderSource = "#version 330 core\n"
+            "out vec4 FragColor;\n"
+            "uniform vec3 color;\n"
+            "void main()\n"
+            "{\n"
+            "   FragColor = vec4(color, 1.0f);\n"
+            "}\n\0";
 
-	protected:
+        // vertex shader
+        int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+        glCompileShader(vertexShader);
+        // check for shader compile errors
 
+        // fragment shader
+        int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+        glCompileShader(fragmentShader);
+        // check for shader compile errors
+
+        // link shaders
+        shaderProgram = glCreateProgram();
+        glAttachShader(shaderProgram, vertexShader);
+        glAttachShader(shaderProgram, fragmentShader);
+        glLinkProgram(shaderProgram);
+        // check for linking errors
+
+        glDeleteShader(vertexShader);
+        glDeleteShader(fragmentShader);
+
+        vertices = {
+             pointA.x, pointA.y, pointA.z,
+             pointB.x, pointB.y, pointB.z,
+
+        };
+        
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glBindVertexArray(VAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0); 
+        glBindVertexArray(0);
+
+		col = colour;
+	};
+	~CDebugLine()
+	{
+        glDeleteVertexArrays(1, &VAO);
+        glDeleteBuffers(1, &VBO);
+        glDeleteProgram(shaderProgram);
+    }
+	
+	void Draw( Camera cam )
+	{
+        glm::mat4 Model = glm::mat4( 1.0f ); //We dont need to do much here.
+		glm::mat4 mvp = cam.Projection * cam.View * Model;
+
+		glUseProgram(shaderProgram);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "MVP"), 1, GL_FALSE, &mvp[0][0]);
+        glUniform3fv(glGetUniformLocation(shaderProgram, "color"), 1, &col[0]);
+
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_LINES, 0, 2);
+        glBindVertexArray(0);
+	};
+
+protected:
+	GLuint VAO;
+    GLuint VBO;
+	std::vector<float> vertices;
+	int shaderProgram;
+	glm::vec3 col;
 };
 
 //Todo: Primitive renderers for if we implement RMPA node viewing?
@@ -495,10 +586,15 @@ class CDebugLines
 #include <filesystem>
 
 //Tool state system, will allow the tool to have multiple "screens", IE, a file browser, that it can swap between
+class CToolStateHandler;
+
 class BaseToolState
 {
 public:
-	BaseToolState(){};
+	BaseToolState()
+	{
+		pOwner = NULL;
+	};
 
 	virtual void Init( sf::RenderWindow *iwindow )
 	{
@@ -507,58 +603,122 @@ public:
 	virtual void ProccessEvent( sf::Event event ){};
 	virtual void Draw(){};
 
+	void SetOwner( CToolStateHandler *owner )
+	{
+		pOwner = owner;
+	};
+
 protected:
 	sf::RenderWindow *window;
+	CToolStateHandler *pOwner;
+};
+
+//Ugly little State manager system
+class CToolStateHandler
+{
+public:
+	~CToolStateHandler()
+	{
+		state_map.clear(); //Purge map and delete elements.
+	}
+
+	void AddState( std::string name, BaseToolState *state )
+	{
+		if( state_map.count( name ) == 0 ) //We do not already have a state of this name:
+		{
+			state_map[ name ] = state;
+			state->SetOwner( this );
+		}
+	};
+	BaseToolState * GetState( std::string name )
+	{
+		return state_map[ name ];
+	};
+
+	void SetState( std::string state )
+	{
+		curState = state;
+	};
+
+	void ProccessEvent( sf::Event e )
+	{
+		if( state_map.count( curState ) > 0 )
+		{
+			state_map[ curState ]->ProccessEvent( e );
+		}
+	};
+	void Draw()
+	{
+		if( state_map.count( curState ) > 0 )
+		{
+			state_map[ curState ]->Draw();
+		}
+	};
+
+	std::map< std::string, BaseToolState * > state_map;
+
+private:
+	std::string curState;
 };
 
 //Tool state is in "Model Renderer"
 class CStateModelRenderer : public BaseToolState
 {
 	public:
-	CStateModelRenderer(){};
-	
+	~CStateModelRenderer()
+	{
+		meshs.clear(); //Lets hope this call the destructor.
+
+		//TODO: Kill shaders?
+	};
+
 	void Init( sf::RenderWindow *iwindow )
 	{
 		window = iwindow;
 
-		//Init OPENGL related stuff;
-    	MDBReader reader( "model2.mdb" ); //Todo: Memory management.
-
 		//Todo: Reference font in some kind of common way.
     	font.loadFromFile( "Font.ttf" );
 
-		//Text information about the viewer
-		std::wstring strObjName = reader.model.names[ reader.model.objects[0].nameindex ];
-		std::wstring strMeshInfo = L"Mesh 1 of " + std::to_wstring( reader.model.objects[0].meshcount );
-		std::wstring strVertexInfo = L"Number of vertices: " + std::to_wstring( reader.model.objects[0].meshs[0].vertexnumber );
-
-		text = sf::Text( L"Displaying: " + strObjName + L"\n" + strMeshInfo + L"\n" + strVertexInfo, font, 20u );
+		text = sf::Text( L"NO MESH LOADED", font, 20u );
 		text.setFillColor( sf::Color( 0, 255, 0 ) );
 		text.setPosition( sf::Vector2f( 5, 5 ) );
 
-		strReadoutText = "Rendering 1 Mesh at position:";
+		strReadoutText = "Rendering 1 Mesh(s) at position:";
 		meshObjReadoutText = sf::Text( strReadoutText, font, 15U );
 		meshObjReadoutText.setFillColor( sf::Color( 255, 0, 0 ) );
 		meshObjReadoutText.setPosition( sf::Vector2f( 5, 600-15-5 ) );
 
+		//Init OPENGL related stuff;
+
 		//Enable Culling
-		glEnable(GL_CULL_FACE);
-		glFrontFace(GL_CCW);
+		glEnable( GL_CULL_FACE );
+		glFrontFace( GL_CCW );
 		
 		// Create and compile our GLSL program from the shaders
-		GLuint programID = LoadShaders( "SimpleVertexShader.txt", "SimpleTexturedFragShader.txt" ); //Todo: Common rendering library?
-		GLuint shader_Untextured = LoadShaders( "SimpleVertexShader.txt", "SimpleFragmentShader.txt" );
+		programID = LoadShaders( "SimpleVertexShader.txt", "SimpleTexturedFragShader.txt" ); //Todo: Common rendering library?
+		shader_Untextured = LoadShaders( "SimpleVertexShader.txt", "SimpleFragmentShader.txt" );
 
-		mesh = std::make_unique<MeshObject>( reader.test, reader.test2, reader.uvs, programID, LoadDDS("texture1.dds") ); //Todo: Perhaps use new/pointers/ect.
+		//mesh = std::make_unique<MeshObject>( reader.GetMeshPositionVertices(0, 0), reader.GetMeshIndices(0, 0), reader.uvs, programID, LoadDDS("texture1.dds") ); //Todo: Perhaps use new/pointers/ect.
 		
+		//Try to form a bone map:
+		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[1], reader.bonepos[0], glm::vec3( 0, 0, 255 ) ) );
+		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[2], reader.bonepos[0], glm::vec3( 0, 0, 255 ) ) );
+		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[3], reader.bonepos[2], glm::vec3( 0, 0, 255 ) ) );
+
 		//mesh.Texture = loadDDS_FromBuffer( modelArc.ReadFile( L"HD-TEXTURE", reader.model.textures[0].filename ) );
 		//MeshObject mesh2( reader.test, reader.test2, reader.uvs, programID );
 		//mesh.shaderID = programID;
 
 		// Enable depth test
-		glEnable(GL_DEPTH_TEST);
+		glEnable( GL_DEPTH_TEST );
 		// Accept fragment if it closer to the camera than the former one
-		glDepthFunc(GL_LEQUAL);
+		glDepthFunc( GL_LEQUAL );
+
+		//Final var init;
+		isDragging = false;
+		bUseWireframe = false;
+		fov = 45.0f;
+		cameraPosition = glm::vec3( 2, 0, 0 );
 	};
 
 	void ProccessEvent( sf::Event event )
@@ -570,10 +730,46 @@ class CStateModelRenderer : public BaseToolState
 		}
 		else if( event.type == sf::Event::KeyPressed ) //Temp:
 		{
-			if( event.key.code == sf::Keyboard::Right )
+			if( event.key.code == sf::Keyboard::F )
 			{
-				mesh->angles.y += 0.01;
+				bUseWireframe = !bUseWireframe;
+				//Not the best solution, but here we are.
+				for( int i = 0; i < meshs.size(); ++i )
+				{
+					meshs[i]->shaderID = bUseWireframe ? shader_Untextured : programID;
+					meshs[i]->TextureID = glGetUniformLocation(meshs[i]->shaderID, "myTextureSampler");
+				}
 			}
+			else if( event.key.code == sf::Keyboard::Down )
+				cameraPosition.x += 0.1;
+		}
+
+		if( event.type == sf::Event::MouseButtonPressed )
+		{
+			//Additional checks can go here.
+
+			if( event.mouseButton.button == sf::Mouse::Button::Left )
+			{
+				mouseOldPos = sf::Mouse::getPosition( *window );
+				isDragging = true;
+			}
+		}
+		else if( event.type == sf::Event::MouseButtonReleased )
+		{
+			//Additional checks can go here.
+
+			if( event.mouseButton.button == sf::Mouse::Button::Left && isDragging )
+			{
+				isDragging = false;
+			}
+		}
+		else if( event.type == sf::Event::MouseMoved && isDragging )
+		{
+			sf::Vector2i mousePos = sf::Mouse::getPosition( *window );
+			for( int i = 0; i < meshs.size(); ++i )
+				meshs[i]->angles.y -= (float)(mouseOldPos.x - mousePos.x) / 1000.0f;
+
+			mouseOldPos = mousePos;
 		}
 	}
 
@@ -584,26 +780,37 @@ class CStateModelRenderer : public BaseToolState
         
         // Camera matrix
         cam.View = glm::lookAt(
-            glm::vec3(2,0,0), // Camera position, in World Space
+            cameraPosition, // Camera position, in World Space
             glm::vec3(0,0,0), // Camera Look At position
             glm::vec3(0,1,0)  // Head is up (set to 0,-1,0 to look upside-down)
             );
         
-        strReadoutText = "Rendering 1 Mesh at position: " + std::to_string( mesh->position.x ) + ", " +
-        std::to_string( mesh->position.y ) + ", " + std::to_string( mesh->position.z );
-        meshObjReadoutText.setString( strReadoutText );
+        //strReadoutText = "Rendering 1 'object' at position: " + std::to_string( mesh->position.x ) + ", " +
+        //std::to_string( mesh->position.y ) + ", " + std::to_string( mesh->position.z );
+        //meshObjReadoutText.setString( strReadoutText );
 
         window->clear();
 
         glClear( GL_DEPTH_BUFFER_BIT );
 
         //Turn on wireframe mode
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		if( bUseWireframe )
+        	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         
-        mesh->Draw(cam);
+		//Draw mesh(s)
+		for( int i = 0; i < meshs.size(); ++i )
+        	meshs[i]->Draw( cam );
+
+		//std::cout << glGetError() + "\n";
 
         //Turn off wireframe mode
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		if( bUseWireframe )
+        	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+		//for( const auto & line : lines )
+		//{
+		//	line->Draw( cam );
+		//}
 
 		glUseProgram(0);
 
@@ -615,18 +822,79 @@ class CStateModelRenderer : public BaseToolState
         window->display();
 	}
 
+	void LoadMDB( std::string ipath )
+	{
+		//Proccess:
+		std::filesystem::path fsPath = ipath;
+
+		if( fsPath.extension() == ".mdb" ) //Load directly from MDB file
+		{
+			//Load mdb
+			//TODO: Load this more dynamically, through some kind of user input.
+			MDBReader reader( ipath.c_str() ); //Todo: Memory management.
+
+			//Text information about the viewer
+			std::wstring strObjName = reader.model.names[ reader.model.objects[0].nameindex ];
+			std::wstring strMeshInfo = L"Object 1 of " + std::to_wstring( reader.model.objectscount );
+			std::wstring strVertexInfo = L"Number of vertices (MESH 1): " + std::to_wstring( reader.model.objects[0].meshs[0].vertexnumber );
+
+			text.setString( L"Displaying: " + strObjName + L"\n" + strMeshInfo + L"\n" + strVertexInfo );
+
+			meshs.clear();
+			//meshs.push_back( std::make_unique<MeshObject>( reader.GetMeshPositionVertices(0, 0), reader.GetMeshIndices(0, 0), reader.uvs, programID, LoadDDS("texture1.dds") ) );
+			
+			for( int i = 0; i < reader.model.objects[0].meshcount; ++i )
+			{
+				meshs.push_back( std::make_unique<MeshObject>( reader.GetMeshPositionVertices(0, i), reader.GetMeshIndices(0, i), reader.uvs, programID, LoadDDS("texture1.dds") ) );
+			}
+		}
+		else if( fsPath.extension() == ".RAB" )
+		{
+			//Load RAB archive
+			RABReader mdlArc( ipath.c_str() );
+			std::wstring fileName;
+			//find first model in RAB archive.
+			for( int i = 0; i < mdlArc.numFiles; ++i )
+			{
+				if( mdlArc.files[i].folder == L"MODEL" )
+				{
+					fileName = mdlArc.files[i].name;
+					break;
+				}
+			}
+			MDBReader model( mdlArc.ReadFile( L"MODEL", fileName ) );
+			std::vector< char > textureBytes;
+			textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", model.model.textures[0].filename );
+
+			meshs.push_back( std::make_unique<MeshObject>( model.GetMeshPositionVertices(0, 0), model.GetMeshIndices(0, 0), model.uvs, programID, LoadDDS_FromBuffer(textureBytes) ) );
+		}
+	}
+
 	protected:
 	//Renderables:
 	sf::Font font;
 	sf::Text text;
 	sf::Text meshObjReadoutText;
-	std::unique_ptr<MeshObject> mesh;
+
+	std::vector< std::unique_ptr<MeshObject>> meshs;
+
+	//std::vector< std::unique_ptr<CDebugLine> > lines;
 
 	//Variables:
 	std::string strReadoutText;
 	GLuint programID;
 	GLuint shader_Untextured;
 	Camera cam;
+
+	bool bUseWireframe;
+
+	//TODO: This shouldnt be here, it should be in the camera class.
+	glm::vec3 cameraPosition;
+	float fov;
+
+	//Control variables
+	sf::Vector2i mouseOldPos;
+	bool isDragging;
 };
 
 //Tool state is in "File Browser"
@@ -659,6 +927,13 @@ public:
 						path = newpath;
 						PopulateTexts();
 					}
+					else
+					{
+						//Fuck you.
+						CStateModelRenderer * renderer = (CStateModelRenderer*)pOwner->GetState( "viewer" );
+						renderer->LoadMDB( newpath );
+						pOwner->SetState( "viewer" );
+					}
 				}
 			}
 		}
@@ -666,6 +941,7 @@ public:
 	void Draw()
 	{
 		window->clear();
+		window->pushGLStates();
 		for( int i = 0; i < texts.size(); ++i )
 		{
 			if( i > 0 && texts[i].getGlobalBounds().contains( sf::Vector2f( sf::Mouse::getPosition( *window ) ) ) )
@@ -674,6 +950,7 @@ public:
 				texts[i].setFillColor( sf::Color( 0, 255, 0 ) );
 			window->draw(texts[i]);
 		}
+		window->popGLStates();
 		window->display();
 	};
 protected:
@@ -690,11 +967,14 @@ protected:
 
 		for( const auto & entry : std::filesystem::directory_iterator( path ) )
 		{
-			sf::Text text = sf::Text( entry.path().c_str(), font, 20u );
-			text.setFillColor( sf::Color( 0, 255, 0 ) );
-			text.setPosition( sf::Vector2f( 5, texts.back().getGlobalBounds().top + texts.back().getGlobalBounds().height ) );
+			if( entry.path().extension() == ".mdb" || entry.path().extension() == ".RAB" || entry.is_directory() )
+			{
+				sf::Text text = sf::Text( entry.path().c_str(), font, 20u );
+				text.setFillColor( sf::Color( 0, 255, 0 ) );
+				text.setPosition( sf::Vector2f( 5, texts.back().getGlobalBounds().top + texts.back().getGlobalBounds().height ) );
 
-			texts.push_back( text );
+				texts.push_back( text );
+			}
 		}
 	}
 
@@ -703,6 +983,10 @@ protected:
 	std::string path;
 };
 
+
+//##############################################################
+//Program entrypoint.
+//##############################################################
 int main()
 {
     //std::cout << "Test:\n";
@@ -725,9 +1009,22 @@ int main()
 
     sf::RenderWindow window( sf::VideoMode(800, 600), "MDB Viewer", sf::Style::Default, settings );
 
+	//State manager;
+	CToolStateHandler *states = new CToolStateHandler();
+
 	//Create states:
-	std::unique_ptr< BaseToolState > state = std::make_unique< CStateModelRenderer >( ); //Might not need unique_ptr here.
-	state->Init( &window ); //Feed the state a ptr to the sf window and initialise.
+	CStateModelRenderer *mdlRenderer = new CStateModelRenderer( );
+	mdlRenderer->Init( &window ); //Feed the state a ptr to the sf window and initialise.
+	//mdlRenderer->LoadMDB( "model2.mdb" );
+
+	BaseToolState *fileBrowser = new CStateFileBrowser( );
+	fileBrowser->Init( &window ); //Feed the state a ptr to the sf window and initialise.
+
+	states->AddState( "browser", fileBrowser );
+	states->AddState( "viewer", mdlRenderer );
+
+	//Set default state
+	states->SetState( "browser" );
 
     //MAIN LOOP
     while (window.isOpen())
@@ -738,13 +1035,14 @@ int main()
             if( event.type == sf::Event::Closed )
                 window.close();
             
-			state->ProccessEvent( event );
+			states->ProccessEvent( event );
         }
 
-        state->Draw(); //Todo: Place common draw steps before and after state.
+        states->Draw(); //Todo: Place common draw steps before and after state.
     }
 
 	//Erase states, calling deconstructors.
+	delete states;
 
     //Todo: Nicely clean up OpenGL and other such memory.
 

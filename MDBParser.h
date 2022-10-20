@@ -13,6 +13,36 @@ struct MDBTexture
     int UNK0;
 };
 
+
+//Material Texture Struct
+struct MDBMaterialTexture
+{
+    int textureIndex;
+    std::string type;
+    int unk0;
+    int unk1;
+    int unk2;
+    int unk3;
+    int unk4;
+};
+
+//Material Struct
+struct MDBMaterial
+{
+    short materialIndex;
+    char unk0;
+    char unk1;
+    std::wstring materialName;
+    std::wstring shader;
+    //Subtable 1
+
+    //Textures
+    std::vector< MDBMaterialTexture > textures;
+    int textureCount;
+
+    int unk2;
+};
+
 //Vertex Layour STruct, holds data that helps read the vertices
 struct MDBVertexLayoutInfo
 {
@@ -76,6 +106,9 @@ struct MDB
     int objectscount;
     std::vector<MDBObject> objects;
 
+    int materialscount;
+    std::vector< MDBMaterial > materials;
+
     int texturescount;
     std::vector< MDBTexture > textures;
 };
@@ -94,8 +127,9 @@ public:
     //Accessors
     //TODO: This probably should just be a generic type, as the MDB reader component should be self contained.
     std::vector< glm::vec3 > GetMeshPositionVertices( int objNum, int meshNum );
-
     std::vector< unsigned int > GetMeshIndices( int objNum, int meshNum );
+    std::vector< glm::vec2 > GetMeshUVs( int objNum, int meshNum );
+    std::wstring GetColourTextureFilename( int objNum, int meshNum );
 
     //Temp:
     std::vector< glm::vec2 > uvs; //This needs to go ASAP

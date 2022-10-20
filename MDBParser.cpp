@@ -69,6 +69,12 @@ void MDBReader::Parse( )
     model.objectscount = ReadInt( &mdbBytes, 0x18 );
     int iObjectTableOffs = ReadInt( &mdbBytes, 0x1C );
 
+    model.materialscount = ReadInt( &mdbBytes, 0x20 );
+    int materialOffs = ReadInt( &mdbBytes, 0x24 );
+
+    model.texturescount = ReadInt( &mdbBytes, 0x28 );
+    int textureOffs = ReadInt( &mdbBytes, 0x2C );
+
     //Read tables:
     ReadNameTable( iNameTableOffs );
 
@@ -82,7 +88,7 @@ void MDBReader::Parse( )
         bone.boneIndex = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
-        std::wcout << L"Bone? " + model.names[ bone.boneIndex ] + L"\n";
+        //std::wcout << L"Bone? " + model.names[ bone.boneIndex ] + L"\n";
 
         //Bone Parent
         bone.boneParent = ReadInt( &mdbBytes, pos );
@@ -147,8 +153,89 @@ void MDBReader::Parse( )
         model.objects.push_back(obj);
     }
 
-    model.texturescount = ReadInt( &mdbBytes, 0x28 );
-    int textureOffs= ReadInt( &mdbBytes, 0x2C );
+    //Read material offset:
+    pos = materialOffs;
+    for( int i = 0; i < model.materialscount; ++i )
+    {
+        int base = pos;
+
+        MDBMaterial material;
+
+        //Index:
+        material.materialIndex = ReadShort( &mdbBytes, pos );
+        pos += 0x2;
+
+        //Unknowns
+        material.unk0 = mdbBytes[pos];
+        pos++;
+
+        material.unk1 = mdbBytes[pos];
+        pos++;
+
+        //Material Name
+        material.materialName = model.names[ ReadInt( &mdbBytes, pos ) ];
+        pos += 0x4;
+
+        //Shader Name:
+        material.shader = ReadUnicode( &mdbBytes, base + ReadInt( &mdbBytes, pos ), false );
+        pos += 0x4;
+
+
+        //Unimplemented as of yet:
+        pos += 0x4;
+        pos += 0x4;
+
+        //Material Textures:
+        int materialTexturesOfs = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        material.textureCount = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        //Read MaterialTexture
+        //Todo: Move this elsewhere.
+        //Store 'pos'
+        int oldPos = pos;
+
+        pos = base + materialTexturesOfs;
+        for( int j = 0; j < material.textureCount; ++j )
+        {
+            base = pos;
+            MDBMaterialTexture matTex;
+
+            //Texture Index
+            matTex.textureIndex = ReadInt( &mdbBytes, pos );
+            pos += 0x4;
+
+            //Type
+            matTex.type = ReadASCII( &mdbBytes, base + ReadInt( &mdbBytes, pos ) );
+            pos += 0x4;
+
+            //Unknown Values:
+            matTex.unk0 = ReadInt( &mdbBytes, pos );
+            pos += 0x4;
+            matTex.unk1 = ReadInt( &mdbBytes, pos );
+            pos += 0x4;
+            matTex.unk2 = ReadInt( &mdbBytes, pos );
+            pos += 0x4;
+            matTex.unk3 = ReadInt( &mdbBytes, pos );
+            pos += 0x4;
+            matTex.unk4 = ReadInt( &mdbBytes, pos );
+            pos += 0x4;
+
+            material.textures.push_back( matTex );
+        }
+
+        //Restore 'pos'
+        pos = oldPos;
+
+        //3rd Unknown
+        material.unk2 = ReadInt( &mdbBytes, pos );
+        pos += 0x4;
+
+        //Add to "material" list
+        model.materials.push_back( material );
+    }
 
     //Read texture offset:
     pos = textureOffs;
@@ -402,6 +489,30 @@ std::vector< glm::vec3 > MDBReader::GetMeshPositionVertices( int objNum, int mes
     return returnValue;
 }
 
+std::vector< glm::vec2 > MDBReader::GetMeshUVs( int objNum, int meshNum )
+{
+    std::vector< glm::vec2 > returnValue;
+
+    //Check if in bounds:
+    if( objNum > model.objectscount )
+        return returnValue;
+
+    if( meshNum > model.objects[objNum].meshcount )
+        return returnValue;
+
+    //Access relevant vector and translate to vertex vec3
+    MDBMeshInfo *mesh = &model.objects[objNum].meshs[meshNum];
+    for( int i = 0; i < mesh->vertexdata[ "texcoord0" ].size(); i += 2 ) //This should be fine in most cases. However, I should test for "type"
+    {
+        float x = mesh->vertexdata[ "texcoord0" ][i];
+        float y = mesh->vertexdata[ "texcoord0" ][i+1];
+
+        returnValue.push_back( glm::vec2( x, y ) );
+    }
+
+    return returnValue;
+}
+
 //A nicer way to get mesh indices.
 std::vector< unsigned int > MDBReader::GetMeshIndices( int objNum, int meshNum )
 {
@@ -415,6 +526,32 @@ std::vector< unsigned int > MDBReader::GetMeshIndices( int objNum, int meshNum )
         return returnValue;
 
     returnValue = model.objects[objNum].meshs[meshNum].indicedata;
+
+    return returnValue;
+}
+
+std::wstring MDBReader::GetColourTextureFilename( int objNum, int meshNum )
+{
+    std::wstring returnValue;
+
+    //Check if in bounds:
+    if( objNum > model.objectscount )
+        return returnValue;
+
+    if( meshNum > model.objects[objNum].meshcount )
+        return returnValue;
+
+    //Look up Material:
+    int materialID = model.objects[ objNum ].meshs[ meshNum ].material;
+
+    for( int i = 0; i < model.materials[ materialID ].textureCount; ++i )
+    {
+        if( model.materials[ materialID ].textures[i].type == "albedo" )
+        {
+            int textureID = model.materials[ materialID ].textures[i].textureIndex;
+            return model.textures[ textureID ].filename;
+        }
+    }
 
     return returnValue;
 }

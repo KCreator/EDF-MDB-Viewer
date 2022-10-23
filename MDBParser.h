@@ -121,6 +121,7 @@ class MDBReader
 {
 public:
     //Constructor
+    MDBReader( ){};  //Blank ctor
     MDBReader( const char* path );  //From file
     MDBReader( std::vector< char > bytes ); //From bytes
 

@@ -371,7 +371,20 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
                 }
                 else if( info.type == 4 ) //Float3 (12 bytes)
                 {
-                    vertPos += 12;
+                    float x = ReadFloat( &mdbBytes, vertPos, true );
+                    vertPos += 0x4;
+
+                    float y = ReadFloat( &mdbBytes, vertPos, true );
+                    vertPos += 0x4;
+
+                    float z = ReadFloat( &mdbBytes, vertPos, true );
+                    vertPos += 0x4;
+
+                    //Store to our vertexData map.
+                    std::string vertexName = mesh.vertexinfo[ vi ].name + std::to_string( mesh.vertexinfo[ vi ].channel );
+                    mesh.vertexdata[ vertexName ].push_back( x );
+                    mesh.vertexdata[ vertexName ].push_back( y );
+                    mesh.vertexdata[ vertexName ].push_back( z );
                 }
                 else if( info.type == 7 ) //array of 4 half floats (8 bytes)
                 {
@@ -477,7 +490,22 @@ std::vector< glm::vec3 > MDBReader::GetMeshPositionVertices( int objNum, int mes
 
     //Access relevant vector and translate to vertex vec3
     MDBMeshInfo *mesh = &model.objects[objNum].meshs[meshNum];
-    for( int i = 0; i < mesh->vertexdata[ "position0" ].size(); i += 4 ) //This should be fine in most cases. However, I should test for "type"
+
+    //Find the vertex layout type of 'position'
+    int id = 0;
+    for( int i = 0; i < mesh->layoutcount; ++i )
+    {
+        if( mesh->vertexinfo[i].name == "position" )
+        {
+            id = i;
+        }
+    }
+
+    int ofs = 4;
+    if( mesh->vertexinfo[id].type == 4 )
+        ofs = 3;
+
+    for( int i = 0; i < mesh->vertexdata[ "position0" ].size(); i += ofs ) //This should be fine in most cases. However, I should test for "type"
     {
         float x = mesh->vertexdata[ "position0" ][i];
         float y = mesh->vertexdata[ "position0" ][i+1];

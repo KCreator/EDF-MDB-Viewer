@@ -184,20 +184,22 @@ public:
 				//Attempt to do something with this data
 				//TODO: Cleanup, organise, ect.
 				int oldPos = pos;
-				if( name == L"map.mapo" ) //We are interested in "MAPO" right now.
+				if( name == L"map.mapo" )
 				{
 					std::vector<char> mapoBuff( blockSize );
 					std::copy( buffer.begin() + blockAddress, buffer.begin() + blockAddress + blockSize, mapoBuff.begin() );
 					ParseMapO( mapoBuff );
+
 					mapoBuff.clear();
 				}
-				//if( name == L"map.mapb" ) //We are interested in "MAPO" right now.
-				//{
-				//	std::vector<char> mapoBuff( blockSize );
-				//	std::copy( buffer.begin() + blockAddress, buffer.begin() + blockAddress + blockSize, mapoBuff.begin() );
-				//	ParseMapB( mapoBuff );
-				//	mapoBuff.clear();
-				//}
+				if( name == L"map.mapb" )
+				{
+					std::vector<char> mapbBuff( blockSize );
+					std::copy( buffer.begin() + blockAddress, buffer.begin() + blockAddress + blockSize, mapbBuff.begin() );
+					ParseMapB( mapbBuff );
+
+					mapbBuff.clear();
+				}
 				pos = oldPos;
 			}
 		}
@@ -207,31 +209,115 @@ public:
 		file.close( );
 	}
 
-	//void ParseMapB( std::vector< char> buffer )
-	//{
-	//	int pos = 0;
-	//}
+	void ParseMapB( std::vector< char> buffer )
+	{
+		int pos = 0;
+
+		int iStringOffs = ReadInt( &buffer, pos + 0x8 );
+		int iStringCount = ReadInt( &buffer, pos + 0xc );
+
+		int iMAPBTable1Offs = ReadInt( &buffer, pos + 0x18 );
+		int iMAPBTable1Count = ReadInt( &buffer, pos + 0x1c );
+
+		int iMAPBTable2Offs = ReadInt( &buffer, pos + 0x20 );
+		int iMAPBTable2Count = ReadInt( &buffer, pos + 0x24 );
+
+		/*
+		pos = iMAPBTable1Offs;
+		for( int i = 0; i < iMAPBTable1Count; ++i )
+		{
+			int unk0 = ReadInt( &buffer, pos );
+			pos += 0x4;
+
+			int sgoOffs = ReadInt( &buffer, pos );
+			pos += 0x4;
+
+			std::wstring name = ReadUnicode( &buffer, iMAPBTable1Offs + sgoOffs, false );
+			std::wcout << name + L"\n"; //Debugging.
+		}
+		*/
+
+		pos = iMAPBTable2Offs;
+
+		for( int i = 0; i < iMAPBTable2Count; ++i )
+		{
+			//Offset to Table
+			int offs = ReadInt( &buffer, pos );
+			pos += 0x4;
+			//X Pos
+			float xPos = ReadFloat( &buffer, pos, true );
+			pos += 0x4;
+			//Y Pos
+			float yPos = ReadFloat( &buffer, pos, true );
+			pos += 0x4;
+			//Z Pos
+			float zPos = ReadFloat( &buffer, pos, true );
+			pos += 0x4;
+
+			//RotationX
+			float xRot = ReadFloat( &buffer, pos, true );
+			pos += 0x4;
+			//RotationY
+			float yRot = ReadFloat( &buffer, pos, true );
+			pos += 0x4;
+			//RotationZ
+			float zRot = ReadFloat( &buffer, pos, true );
+			pos += 0x4;
+
+			//Store this for later?
+			positions.push_back( glm::vec3( xPos, yPos, zPos ) );
+			rotations.push_back( glm::vec3( xRot, yRot, zRot ) );
+
+			//Ignore unknowns.
+			pos += 0x4 * 10;
+		}
+	}
 
 	void ParseMapO( std::vector< char> buffer )
 	{
+		//Can't seem to figure this out right now. Fukou da.
 		int pos = 0;
 					
 		int objectTable1Offs = ReadInt( &buffer, pos + 0x8 );
 		int objectTable1Count = ReadInt( &buffer, pos + 0xc );
 
 		int objectStringTableOffs = ReadInt( &buffer, pos + 0x48 );
+		int objectStringTableCount = ReadInt( &buffer, pos + 0x4C );
 
 		int objectTable3Offs = ReadInt( &buffer, pos + 0x20 );
+		int objectTable3Count = ReadInt( &buffer, pos + 0x24 );
 
-		int test = ReadInt( &buffer, objectTable3Offs + 0x20 );
-		std::wstring name = ReadUnicode( &buffer, objectTable3Offs + test, false );
-		std::wcout << name + L"\n"; //Debugging.
+		int objectTable5Offs = ReadInt( &buffer, pos + 0x38 );
+		int objectTable5Size = ReadInt( &buffer, pos + 0x3c );
 
-		return;
+		//return;
 
 		pos = objectTable1Offs;
 		for( int j = 0; j < objectTable1Count; ++j )
 		{
+			//Read:
+			//std::cout << "Var: ";
+			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x00 ) ) + ",";
+			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x04 ) ) + ","; //Apparently offset to 4th data table?
+			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x08 ) ) + ",";
+			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x0c ) ) + ",";
+			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x10 ) ) + ",";
+			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x14 ) ) + ",";
+			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x18 ) ) + "\n";
+
+			int offset1 = ReadInt( &buffer, pos + 0x04 );
+			//std::cout << "4th table value: " + std::to_string( ReadInt( &buffer, pos + offset1 ) ) + "\n";
+			int test = offset1 + ReadInt( &buffer, pos + offset1 );
+
+			int namOfs = ReadInt( &buffer, pos + test + 0x20 );
+			std::wstring tname = ReadUnicode( &buffer, pos + test + namOfs, false );
+			//std::wcout << tname + L"\n"; //Debugging.
+
+			modelNames.push_back( tname ); //Store for later...
+
+			pos += 0x1c;
+			continue;
+
 			int unk0 = ReadInt( &buffer, pos );
 			pos += 0x4;
 
@@ -257,7 +343,39 @@ public:
 			pos += 0x4;
 			pos += 0x4;
 		}
+
+		return; //TEMP!
+
+		//Test:
+		pos = objectTable3Offs;
+		for( int i = 0; i < objectTable3Count; ++i )
+		{
+			int base = pos;
+
+			//Get object .hkt name
+			int hktSringOffs = ReadInt( &buffer, pos + 0x04 );
+			std::wstring hktString = ReadUnicode( &buffer, base + hktSringOffs, false );
+
+			//Seems there is only 1 value at 0xC that matters. Everything else is zero... Very different compared to the 4.1 notes...
+
+			//Get object hk.mdb name
+			int hkmdbSringOffs = ReadInt( &buffer, pos + 0x14 );
+			std::wstring hkmdbString = ReadUnicode( &buffer, base + hkmdbSringOffs, false );
+
+			//This seems to get object names now.
+			int test = ReadInt( &buffer, pos + 0x20 );
+			std::wstring name = ReadUnicode( &buffer, base + test, false );
+			std::wcout << name + L"\n"; //Debugging.
+
+			//Apparently the 5 map format has an extra byte?
+			pos += 0x38 + 0x4;
+		}
 	}
+
+	//Temp:
+	std::vector< std::wstring > modelNames;
+	std::vector< glm::vec3 > positions;
+	std::vector< glm::vec3 > rotations;
 };
 
 //###################################################
@@ -384,10 +502,6 @@ class CStateModelRenderer : public BaseToolState
 		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[2], reader.bonepos[0], glm::vec3( 0, 0, 255 ) ) );
 		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[3], reader.bonepos[2], glm::vec3( 0, 0, 255 ) ) );
 
-		//mesh.Texture = loadDDS_FromBuffer( modelArc.ReadFile( L"HD-TEXTURE", reader.model.textures[0].filename ) );
-		//MeshObject mesh2( reader.test, reader.test2, reader.uvs, programID );
-		//mesh.shaderID = programID;
-
 		// Enable depth test
 		glEnable( GL_DEPTH_TEST );
 		// Accept fragment if it closer to the camera than the former one
@@ -412,6 +526,13 @@ class CStateModelRenderer : public BaseToolState
 			if( event.key.code == sf::Keyboard::F )
 			{
 				bUseWireframe = !bUseWireframe;
+
+				//Toggle culling.
+				if( bUseWireframe )
+					glDisable( GL_CULL_FACE );
+				else
+					glEnable( GL_CULL_FACE );
+
 				//Not the best solution, but here we are.
 				for( int i = 0; i < meshs.size(); ++i )
 				{
@@ -532,7 +653,8 @@ class CStateModelRenderer : public BaseToolState
 			//Load RAB archive
 			RABReader mdlArc( ipath.c_str() );
 			std::wstring fileName;
-			//find first model in RAB archive.
+
+			//find first model in RAB archive. TODO: Allow user to select this, somehow?
 			for( int i = 0; i < mdlArc.numFiles; ++i )
 			{
 				if( mdlArc.files[i].folder == L"MODEL" )
@@ -612,17 +734,6 @@ class CStateSceneRenderer : public BaseToolState
 		// Create and compile our GLSL program from the shaders
 		programID = ShaderList::LoadShader( "SimpleTextured", "SimpleVertexShader.txt", "SimpleTexturedFragShader.txt" ); //Todo: Common rendering library?
 		shader_Untextured = ShaderList::LoadShader( "Untextured", "SimpleVertexShader.txt", "SimpleFragmentShader.txt" );
-
-		//mesh = std::make_unique<MeshObject>( reader.GetMeshPositionVertices(0, 0), reader.GetMeshIndices(0, 0), reader.uvs, programID, LoadDDS("texture1.dds") ); //Todo: Perhaps use new/pointers/ect.
-		
-		//Try to form a bone map:
-		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[1], reader.bonepos[0], glm::vec3( 0, 0, 255 ) ) );
-		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[2], reader.bonepos[0], glm::vec3( 0, 0, 255 ) ) );
-		//lines.push_back( std::make_unique< CDebugLine >( reader.bonepos[3], reader.bonepos[2], glm::vec3( 0, 0, 255 ) ) );
-
-		//mesh.Texture = loadDDS_FromBuffer( modelArc.ReadFile( L"HD-TEXTURE", reader.model.textures[0].filename ) );
-		//MeshObject mesh2( reader.test, reader.test2, reader.uvs, programID );
-		//mesh.shaderID = programID;
 
 		// Enable depth test
 		glEnable( GL_DEPTH_TEST );
@@ -708,7 +819,7 @@ class CStateSceneRenderer : public BaseToolState
 	void Draw()
 	{
 		// Projection matrix : 45° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-        cam.Projection = glm::perspective( glm::radians(45.0f), (float)800 / (float)600, 0.1f, 100.0f );
+        cam.Projection = glm::perspective( glm::radians(45.0f), (float)800 / (float)600, 0.1f, 1000.0f );
         
 		//pitch = 0;
 		//yaw = 180.0;
@@ -721,7 +832,7 @@ class CStateSceneRenderer : public BaseToolState
 
 		//We have the movement code here, as we want to run it each frame.
 		//TODO: Scale with a deltatime value.
-		float speed = 0.001;
+		float speed = 0.5;
 
 		//Get needed vectors for camera movement.
 		glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f); 
@@ -778,10 +889,57 @@ class CStateSceneRenderer : public BaseToolState
 	void LoadScene( )
 	{
 		//Proccess:
+
+		//Load MAC.
+		MACReader map( "EDFData/IG_EDFROOM01.MAC" );
+
 		//Load RAB archive
 		RABReader mdlArc( "EDFData/IG_EDFROOM01.RAB" );
+
+		//Lets be more effecient about this.
+		//Determine "Unique" models
+		std::map < std::wstring, MDBReader > mdbs;
+		std::map < std::wstring, GLuint > mdbTextures;
+		for( int i = 0; i < map.modelNames.size(); ++i )
+		{
+			if( mdbs.count( map.modelNames[i] ) == 0 )
+			{
+				std::wstring mdbName = map.modelNames[i];
+				mdbs[ mdbName ] = MDBReader( mdlArc.ReadFile( L"MODEL", mdbName ) );
+
+				for( int j = 0; j < mdbs[ mdbName ].model.objects[0].meshcount; ++j )
+				{
+					if( mdbTextures.count( mdbs[ mdbName ].GetColourTextureFilename( 0, j ) ) == 0 )
+					{
+						std::vector< char > textureBytes;
+						textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", mdbs[ mdbName ].GetColourTextureFilename( 0, j ) );
+						mdbTextures[ mdbs[ mdbName ].GetColourTextureFilename( 0, j ) ] = LoadDDS_FromBuffer(textureBytes);
+						textureBytes.clear();
+					}
+				}
+			}
+		}
+
+		//Least effecient modelloader ever made :)
+		for( int iter = 0; iter < map.modelNames.size(); ++iter )
+		{
+			for( int i = 0; i < mdbs[ map.modelNames[iter] ].model.objects[0].meshcount; ++i )
+			{
+				meshs.push_back( std::make_unique<MeshObject>( 
+					mdbs[ map.modelNames[iter] ].GetMeshPositionVertices(0, i), 
+					mdbs[ map.modelNames[iter] ].GetMeshIndices(0, i), 
+					mdbs[ map.modelNames[iter] ].GetMeshUVs( 0, i ), 
+					programID, 
+					mdbTextures[mdbs[ map.modelNames[iter] ].GetColourTextureFilename( 0, i ) ] ) );
+
+				meshs.back()->position = map.positions[iter];
+				meshs.back()->angles = map.rotations[iter];
+			}
+		}
+
+		return;
+
 		std::wstring fileName;
-		//find first model in RAB archive.
 		for( int i = 0; i < mdlArc.numFiles; ++i )
 		{
 			if( mdlArc.files[i].folder == L"MODEL" )
@@ -916,6 +1074,163 @@ protected:
 	std::string path;
 };
 
+//2D UI Elements to overlay on the rendered screen
+class CBaseUIElement
+{
+public:
+	void SetActive( bool active ) { bActive = active; };
+	virtual void HandleEvent( sf::Event e ){};
+	virtual void Draw( sf::RenderWindow *window ){};
+
+protected:
+	bool bActive;
+	sf::Vector2f vecPosition;
+};
+
+//Container with title.
+class CUITitledContainer : public CBaseUIElement
+{
+public:
+	CUITitledContainer(){};
+	CUITitledContainer( sf::Font &txtFont, std::string title )
+	{
+		float xSize = 100;
+		float ySize = 200;
+
+		containerShape = sf::RectangleShape( sf::Vector2f( xSize, ySize ) );
+		containerShape.setFillColor( sf::Color::Black );
+		containerShape.setOutlineColor( sf::Color::Green );
+		containerShape.setOutlineThickness( -1 );
+
+		containerTitle = sf::Text( title, txtFont, 20u );
+
+		float textX = ( xSize / 2.0f ) - (containerTitle.getGlobalBounds().width / 2.0f);
+		containerTitle.setPosition( textX, 0 );
+		containerTitle.setFillColor( sf::Color( 0, 255, 0 ) );
+
+		containerTitleShape = sf::RectangleShape( sf::Vector2f( xSize, containerTitle.getGlobalBounds().height * 2.0f ) );
+		containerTitleShape.setFillColor( sf::Color::Black );
+		containerTitleShape.setOutlineColor( sf::Color::Green );
+		containerTitleShape.setOutlineThickness( -1 );
+	};
+
+	void Draw( sf::RenderWindow *window )
+	{
+		if( !bActive )
+			return;
+
+		window->draw( containerShape );
+		window->draw( containerTitleShape );
+		window->draw( containerTitle );
+	};
+
+protected:
+	sf::RectangleShape containerShape;
+	sf::RectangleShape containerTitleShape;
+	sf::Text containerTitle;
+};
+
+class CUIButton : public CBaseUIElement
+{
+public:
+	CUIButton(){};
+	CUIButton( sf::Font &txtFont, std::string name )
+	{
+		float xSize = 100;
+		float ySize = 30;
+
+		buttonShape = sf::RectangleShape( sf::Vector2f( xSize, ySize ) );
+		buttonShape.setFillColor( sf::Color( 150, 150, 150 ) );
+		buttonShape.setOutlineColor( sf::Color( 200, 200, 200 ) );
+		buttonShape.setOutlineThickness( -1 );
+
+		buttonName = sf::Text( name, txtFont, 20u );
+		buttonName.setFillColor( sf::Color::Black );
+
+		float textX = ( xSize / 2.0f ) - ( buttonName.getGlobalBounds().width / 2.0f );
+		float textY = ( ySize / 2.0f ) - ( buttonName.getGlobalBounds().height );
+		buttonName.setPosition( textX, textY );
+
+		bIsMouseOver = false;
+	};
+	void HandleEvent( sf::Event e )
+	{
+		if( !bActive )
+			return;
+
+		if( e.type == sf::Event::MouseMoved ) //Highlight button when moused over.
+		{
+			if( buttonShape.getGlobalBounds().contains( sf::Vector2f( e.mouseMove.x, e.mouseMove.y ) ) )
+			{
+				buttonShape.setFillColor( sf::Color::Red );
+				bIsMouseOver = true;
+			}
+			else
+			{
+				buttonShape.setOutlineColor( sf::Color( 200, 200, 200 ) );
+				bIsMouseOver = false;
+			}
+		}
+
+		//Perform button action on click
+		else if( e.type == sf::Event::MouseButtonPressed )
+		{
+			if( e.mouseButton.button == sf::Mouse::Button::Left )
+			{
+				//Todo: Implement this.
+
+			}
+		}
+	}
+	void Draw( sf::RenderWindow *window )
+	{
+		if( !bActive )
+			return;
+
+		window->draw( buttonShape );
+		window->draw( buttonName );
+	};
+
+protected:
+	sf::RectangleShape buttonShape;
+	sf::Text buttonName;
+
+	bool bIsMouseOver;
+};
+
+//Temp UI test state
+class CStateUITest : public BaseToolState
+{
+public:
+	void Init( sf::RenderWindow *iwindow )
+	{
+		window = iwindow;
+
+    	font.loadFromFile( "Font.ttf" );
+
+		ui1 = CUIButton( font, "TEST" );
+		ui1.SetActive( true );
+	}
+
+	void ProccessEvent( sf::Event event )
+	{
+		ui1.HandleEvent( event );
+	}
+
+	void Draw()
+	{
+		window->clear();
+		window->pushGLStates();
+
+		ui1.Draw( window );
+		
+		window->popGLStates();
+		window->display();
+	};
+
+	sf::Font font;
+	CUIButton ui1;
+};
 
 //##############################################################
 //Program entrypoint.
@@ -928,9 +1243,6 @@ int main()
 
     //MDBReader reader( "model2.mdb" );
     //MDBReader reader( modelArc.ReadFile( L"MODEL", L"airtortoise_missile.mdb" ) );
-
-	//MACReader map( "EDFData/IG_EDFROOM01.MAC" );
-	//return 0;
 
     //SFML Setup.
     sf::ContextSettings settings;
@@ -960,8 +1272,12 @@ int main()
 	//sceneRenderer->Init( &window ); //Feed the state a ptr to the sf window and initialise.
 	//sceneRenderer->LoadScene();
 
+	//BaseToolState *testState = new CStateUITest( );
+	//testState->Init( &window ); //Feed the state a ptr to the sf window and initialise.
+
 	states->AddState( "browser", fileBrowser );
 	states->AddState( "viewer", mdlRenderer );
+	//states->AddState( "uitest", testState );
 	//states->AddState( "scene", sceneRenderer );
 
 	//Set default state

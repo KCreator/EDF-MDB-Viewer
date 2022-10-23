@@ -389,6 +389,8 @@ MeshObject::~MeshObject()
 	glDeleteBuffers(1, &UVBuffer);
 };
 
+#include <glm/gtx/rotate_vector.hpp>
+
 //Render the mesh using a specified camera.
 void MeshObject::Draw( Camera cam )
 {
@@ -398,9 +400,9 @@ void MeshObject::Draw( Camera cam )
 	Model = glm::translate( Model, position );
 
 	//TODO: This needs to be better.
-	Model = glm::rotate( Model, angles.x, glm::vec3( 1, 0, 0 ) );
-	Model = glm::rotate( Model, angles.y, glm::vec3( 0, 1, 0 ) );
-	Model = glm::rotate( Model, angles.z, glm::vec3( 0, 0, 1 ) );
+	Model = glm::rotate( Model, glm::radians( angles.x ), glm::vec3( 1, 0, 0 ) );
+	Model = glm::rotate( Model, glm::radians( angles.y ), glm::vec3( 0, 1, 0 ) );
+	Model = glm::rotate( Model, glm::radians( angles.z ), glm::vec3( 0, 0, 1 ) );
 
 	// Use our shader
 	glUseProgram(shaderID);

@@ -5,6 +5,7 @@ int ReadInt( std::vector<char> *buf, int pos, bool flipBytes = false );
 
 //Read half int (short) from byte buffer
 short ReadShort( std::vector<char> *buf, int pos );
+unsigned short ReadUShort( std::vector<char> *buf, int pos );
 
 //Read Floating Point from byte buffer
 float ReadFloat( std::vector<char> *buf, int pos, bool reverseBytes = false );

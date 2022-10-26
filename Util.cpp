@@ -53,6 +53,20 @@ short ReadShort( std::vector<char> *buf, int pos )
     return num;
 }
 
+//Read unsigned int (short) from byte buffer
+unsigned short ReadUShort( std::vector<char> *buf, int pos )
+{
+    unsigned char chunk[2];
+
+	chunk[0] = buf->at( pos );
+	chunk[1] = buf->at( pos + 1 );
+
+	unsigned short num;
+    memcpy( &num, chunk, sizeof( unsigned short ) );
+
+    return num;
+}
+
 //Read Floating Point from byte buffer
 float ReadFloat( std::vector<char> *buf, int pos, bool reverseBytes )
 {
@@ -88,7 +102,7 @@ std::wstring ReadUnicode( std::vector<char> *chunk, int pos, bool swapEndian )
 
     std::wstring strn;
 	unsigned char c[2];
-    std::wstring_convert<std::codecvt_utf8<wchar_t>,wchar_t> convert;
+    std::wstring_convert<std::codecvt_utf16<wchar_t>,wchar_t> convert;
 
 	//Repeat until EOF, or otherwise broken
 	while( bufPos < chunk->size() )
@@ -99,7 +113,19 @@ std::wstring ReadUnicode( std::vector<char> *chunk, int pos, bool swapEndian )
         if( c[0] == 0x0 && c[1] == 0x0 )
          break;
 
-        strn += convert.from_bytes( (const char * )c );
+        //No longer crashes, but gets the wrong output for Japanese text. Windows machines might have better luck.
+
+        //Hack:
+        if( c[1] == 0x0 )
+        {
+            wchar_t ch = L' ';
+            memcpy( &ch, &c, 2 );
+            strn += ch;
+        }
+        else
+        {
+            strn += convert.from_bytes( ( const char * )&c[0]  );
+        }
 
         bufPos += 2;
 	}

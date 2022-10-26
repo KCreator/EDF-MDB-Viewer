@@ -350,7 +350,7 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         int indPos = base + IndexDataInfoOffs;
         for( int v = 0; v < mesh.indicesnumber; ++v )
         {
-            short data = ReadShort( &mdbBytes, indPos );
+            unsigned short data = ReadUShort( &mdbBytes, indPos );
             mesh.indicedata.push_back( data );
             //test2.push_back( data );
             indPos += 0x2;
@@ -359,6 +359,7 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         //Parse vertex data.
         //run through "Vertex Size" using Vertex Layout
         int vertPos = base + vertexDataOffs;
+        int oldVertPos = vertPos;
         for( int v = 0; v < mesh.vertexnumber; ++v )
         {
             for( int vi = 0; vi < mesh.layoutcount; ++vi )
@@ -437,6 +438,13 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
                     vertPos += 4;
                 }
             }
+
+            //Failsafe
+            int difference = vertPos - oldVertPos;
+            if( difference != mesh.vertexsize )
+                vertPos += mesh.vertexsize - difference;
+
+            oldVertPos = vertPos;
         }
 
         obj.meshs.push_back( mesh );
@@ -574,7 +582,7 @@ std::wstring MDBReader::GetColourTextureFilename( int objNum, int meshNum )
 
     for( int i = 0; i < model.materials[ materialID ].textureCount; ++i )
     {
-        if( model.materials[ materialID ].textures[i].type == "albedo" )
+        if( model.materials[ materialID ].textures[i].type == "albedo" || model.materials[ materialID ].textures[i].type == "window_frame_texture" )
         {
             int textureID = model.materials[ materialID ].textures[i].textureIndex;
             return model.textures[ textureID ].filename;

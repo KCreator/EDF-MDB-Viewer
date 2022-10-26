@@ -18,7 +18,6 @@
 
 #include "MeshRenderer.h"
 
-
 //Todo: Implement this so that we can draw lines in 3D space.
 //Ugly little debug line renderer.
 class CDebugLine
@@ -121,6 +120,121 @@ protected:
 #include "RAB.h"
 #include <filesystem>
 #include "Util.h"
+
+//###################################################
+//RMPA (EDF Waypoint Data) reader
+//###################################################
+
+//Supporting data structures.
+struct RMPASpawnpoint
+{
+	float x;
+	float y;
+	float z;
+
+	float fx;
+	float fy;
+	float fz;
+
+	std::wstring name;
+};
+
+class CRMPAReader
+{
+public:
+	CRMPAReader ( const char *path )
+	{
+		//Create input stream from path
+		std::ifstream file( path, std::ios::binary | std::ios::ate );
+		std::streamsize size = file.tellg( );
+		file.seekg( 0, std::ios::beg );
+
+		std::vector<char> buffer( size );
+		if( file.read( buffer.data( ), size ) )
+		{
+			int pos = 0x0;
+
+			//TODO: Read file header, determine if valid.
+
+			//Read spawnpoints:
+			pos = 0x20;
+			bool bParseSpawns = ReadInt( &buffer, pos );
+
+			pos = 0x24;
+			int offsSpawnTable = ReadInt( &buffer, pos, true );
+
+			//Read header 1.
+			pos = offsSpawnTable;
+
+			//Type header
+			int subheaderCount = ReadInt( &buffer, offsSpawnTable, true ); //Subheader Count
+			int subheaderOffs = ReadInt( &buffer, offsSpawnTable + 0x4, true ); //Subheader offset.
+			int dataEndOffs = ReadInt( &buffer, offsSpawnTable + 0xc, true ); //Data end offset
+			int typeHeaderID = ReadInt( &buffer, offsSpawnTable + 0x10, true ); //Type header identifier
+			int stringTableOffs = ReadInt( &buffer, offsSpawnTable + 0x18, true ); //Offset to strings
+
+			//Read subheaders
+			pos = offsSpawnTable + subheaderOffs;
+			for( int i = 0; i < subheaderCount; ++i )
+			{
+				int subheaderEndOffs = ReadInt( &buffer, pos + 0x8, true ); //Subheader Data End Point
+				int subheaderNameLen = ReadInt( &buffer, pos + 0x10, true ); //Subheader Name Length
+				int subheaderNameOffs = ReadInt( &buffer, pos + 0x14, true ); //Subheader Name offset
+				int subheaderDataCount = ReadInt( &buffer, pos + 0x18, true ); //Subheader Data Count
+				int subheaderDataOffs = ReadInt( &buffer, pos + 0x1c, true ); //Subheader Data Start Pos
+
+				std::wstring subheaderName = ReadUnicode( &buffer, pos + subheaderNameOffs, true ); //Get our actual name.
+
+				//Read spawn points.
+				for( int j = 0; j < subheaderDataCount; ++j )
+				{
+					int ofs = pos + subheaderDataOffs + (j * 0x40);
+
+					int spawnpointID = ReadInt( &buffer, ofs + 0x8, true );
+
+					//Position
+					float x = ReadFloat( &buffer, ofs + 0x0c );
+					float y = ReadFloat( &buffer, ofs + 0x10 );
+					float z = ReadFloat( &buffer, ofs + 0x14 );
+
+					//Orientation
+					float fx = ReadFloat( &buffer, ofs + 0x1c );
+					float fy = ReadFloat( &buffer, ofs + 0x20 );
+					float fz = ReadFloat( &buffer, ofs + 0x24 );
+
+					int spawnpointNameSize = ReadInt( &buffer, ofs + 0x30, true );
+					int spawnpointNameOffs = ReadInt( &buffer, ofs + 0x34, true );
+
+					std::wstring spawnpointName = ReadUnicode( &buffer, ofs + spawnpointNameOffs, true ); //Get our actual name.
+
+					//Store spawn point. This is largely temporary.
+					RMPASpawnpoint point;
+
+					point.x = x;
+					point.y = y;
+					point.z = z;
+
+					point.fx = fx;
+					point.fy = fy;
+					point.fz = fz;
+
+					point.name = spawnpointName;
+
+					spawnpoints.push_back( point );
+				}
+
+				pos += 0x20;
+			}
+		}
+
+		//Clear buffers
+		buffer.clear( );
+		file.close( );
+	};
+
+	//Temp:
+	std::vector< RMPASpawnpoint > spawnpoints;
+};
 
 //###################################################
 //MAC (EDF Map File) reader
@@ -232,8 +346,18 @@ public:
 			int sgoOffs = ReadInt( &buffer, pos );
 			pos += 0x4;
 
-			std::wstring name = ReadUnicode( &buffer, iMAPBTable1Offs + sgoOffs, false );
+			int unk1 = ReadInt( &buffer, pos );
+			pos += 0x4;
+
+			//Read SGO?
+
+			int strOffs = ReadInt( &buffer, pos );
+			std::wstring name = ReadUnicode( &buffer, pos + strOffs, false );
 			std::wcout << name + L"\n"; //Debugging.
+
+			pos += 0x4;
+
+			pos += 0x38 - ( 0x4 * 4 );
 		}
 		*/
 
@@ -243,7 +367,63 @@ public:
 		{
 			//Offset to Table
 			int offs = ReadInt( &buffer, pos );
+
+			//Attempt to use this table offset.
+			int table1Pos = pos + offs;
+
+			int sgoOffs = ReadInt( &buffer, table1Pos + 0x4 );
+			int strOffs = ReadInt( &buffer, table1Pos + 0xc );
+			std::wstring name = ReadUnicode( &buffer, table1Pos + 0xc + strOffs, false );
+			//std::wcout << name + L"\n"; //Debugging.
+
+			//Try to read some key data from the SGO (TODO: Write SGO handler)
+			int sgoPos = table1Pos + 0x4 + sgoOffs;
+			
+			/*
+			//This confirms we have an SGO file here.
+			char bytes[4];
+			bytes[0] = buffer[sgoPos];
+			bytes[1] = buffer[sgoPos+1];
+			bytes[2] = buffer[sgoPos+2];
+			bytes[3] = buffer[sgoPos+3];
+
+			int numSGOVars = ReadInt( &buffer, sgoPos + 0x8 );
+			int SGOVarsStart = ReadInt( &buffer, sgoPos + 0xc );
+			int numVarNames = ReadInt( &buffer, sgoPos + 0x10 );
+			int SGOVarNamesStart = ReadInt( &buffer, sgoPos + 0x14 );
+
+			//Read Variable Names
+			std::vector< std::wstring > variableNames;
+			for( int j = 0; j < numVarNames; ++j )
+			{
+				int stroffs = ReadInt( &buffer, sgoPos + SGOVarNamesStart + ( j * 0x8 ) );
+				int id = ReadInt( &buffer, sgoPos + SGOVarNamesStart + ( j * 0x8 ) + 0x4  );
+				
+				std::wstring vName = ReadUnicode( &buffer, sgoPos + SGOVarNamesStart + ( j * 8 ) + stroffs, false );
+				variableNames.push_back( vName );
+			}
+
+			for( int j = 0; j < numSGOVars; ++j )
+			{
+				if( variableNames[j] == L"filename" )
+				{
+					int locOfs = sgoPos + SGOVarsStart + ( j * 0xc ); //position + varStart + j * Size of SGO Node
+					int type = ReadInt( &buffer, locOfs );
+					if( type == 3 )
+					{
+						int strSize = ReadInt( &buffer, locOfs + 0x4 );
+						std::wcout << L"Variable '" + variableNames[j] + L"' size =  '" + std::to_wstring( strSize ) + L"'\n";
+
+						int stroffs = ReadInt( &buffer, locOfs + 0x8 );
+						std::wstring value = ReadUnicode( &buffer, locOfs + stroffs, false );
+						std::wcout << L"Variable '" + variableNames[j] + L"' = '" + value + L"'\n";
+					}
+				}
+			}
+			*/
+
 			pos += 0x4;
+
 			//X Pos
 			float xPos = ReadFloat( &buffer, pos, true );
 			pos += 0x4;
@@ -306,14 +486,22 @@ public:
 			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x18 ) ) + "\n";
 
 			int offset1 = ReadInt( &buffer, pos + 0x04 );
-			//std::cout << "4th table value: " + std::to_string( ReadInt( &buffer, pos + offset1 ) ) + "\n";
-			int test = offset1 + ReadInt( &buffer, pos + offset1 );
 
-			int namOfs = ReadInt( &buffer, pos + test + 0x20 );
-			std::wstring tname = ReadUnicode( &buffer, pos + test + namOfs, false );
-			//std::wcout << tname + L"\n"; //Debugging.
+			if( offset1 != 0 )
+			{
+				//std::cout << "4th table value: " + std::to_string( ReadInt( &buffer, pos + offset1 ) ) + "\n";
+				int test = offset1 + ReadInt( &buffer, pos + offset1 );
 
-			modelNames.push_back( tname ); //Store for later...
+				int namOfs = ReadInt( &buffer, pos + test + 0x20 );
+				std::wstring tname = ReadUnicode( &buffer, pos + test + namOfs, false );
+				//std::wcout << tname + L"\n"; //Debugging.
+
+				modelNames.push_back( tname ); //Store for later...
+			}
+			else
+			{
+				modelNames.push_back( L"" ); //Store for later...
+			}
 
 			pos += 0x1c;
 			continue;
@@ -367,6 +555,8 @@ public:
 			std::wstring name = ReadUnicode( &buffer, base + test, false );
 			std::wcout << name + L"\n"; //Debugging.
 
+			modelNames.push_back( name ); //Store for later...
+
 			//Apparently the 5 map format has an extra byte?
 			pos += 0x38 + 0x4;
 		}
@@ -403,6 +593,11 @@ public:
 	void SetOwner( CToolStateHandler *owner )
 	{
 		pOwner = owner;
+	};
+
+	CToolStateHandler * GetOwner()
+	{
+		return pOwner;
 	};
 
 protected:
@@ -567,7 +762,7 @@ class CStateModelRenderer : public BaseToolState
 		{
 			sf::Vector2i mousePos = sf::Mouse::getPosition( *window );
 			for( int i = 0; i < meshs.size(); ++i )
-				meshs[i]->angles.y -= (float)(mouseOldPos.x - mousePos.x) / 1000.0f;
+				meshs[i]->angles.y -= (float)(mouseOldPos.x - mousePos.x) / 10.0f;
 
 			mouseOldPos = mousePos;
 		}
@@ -576,7 +771,7 @@ class CStateModelRenderer : public BaseToolState
 	void Draw()
 	{
 		// Projection matrix : 45° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-        cam.Projection = glm::perspective( glm::radians(45.0f), (float)800 / (float)600, 0.1f, 100.0f );
+        cam.Projection = glm::perspective( glm::radians(45.0f), (float)window->getSize().x / (float)window->getSize().y, 0.1f, 100.0f );
         
         // Camera matrix
         cam.View = glm::lookAt(
@@ -717,6 +912,7 @@ class CStateSceneRenderer : public BaseToolState
 	~CStateSceneRenderer()
 	{
 		meshs.clear(); //Lets hope this call the destructor.
+		lines.clear();
 
 		//TODO: Kill shaders?
 	};
@@ -747,7 +943,7 @@ class CStateSceneRenderer : public BaseToolState
 		pitch = 0;
 		yaw = 180;
 
-		isDragging = false;
+		isMouseCamControl = false;
 
 		sf::Mouse::setPosition( sf::Vector2i(window->getSize().x/2, window->getSize().y/2) , *window );
 		mouseOldPos = sf::Mouse::getPosition( *window );
@@ -779,10 +975,21 @@ class CStateSceneRenderer : public BaseToolState
 					meshs[i]->TextureID = glGetUniformLocation(meshs[i]->shaderID, "myTextureSampler");
 				}
 			}
+			else if( event.key.code == sf::Keyboard::Space )
+			{
+				isMouseCamControl = !isMouseCamControl;
+				window->setMouseCursorVisible( !isMouseCamControl );
+
+				if( isMouseCamControl )
+				{
+					sf::Mouse::setPosition( sf::Vector2i( window->getSize().x/2, window->getSize().y/2 ) , *window );
+					mouseOldPos = sf::Mouse::getPosition( *window );
+				}
+			}
 		}
 		else if (event.type == sf::Event::MouseMoved )
 		{
-			if( isDragging )
+			if( isMouseCamControl )
 			{
 				if( event.mouseMove.x != mouseOldPos.x || event.mouseMove.y != mouseOldPos.y ) //Only care if the muse has actually moved.
 				{
@@ -792,34 +999,12 @@ class CStateSceneRenderer : public BaseToolState
 				}
 			}
 		}
-		if( event.type == sf::Event::MouseButtonPressed )
-		{
-			//Additional checks can go here.
-
-			if( event.mouseButton.button == sf::Mouse::Button::Right )
-			{
-				//mouseOldPos = sf::Mouse::getPosition( *window );
-				window->setMouseCursorVisible( false );
-				sf::Mouse::setPosition( sf::Vector2i(window->getSize().x/2, window->getSize().y/2) , *window );
-				isDragging = true;
-			}
-		}
-		else if( event.type == sf::Event::MouseButtonReleased )
-		{
-			//Additional checks can go here.
-
-			if( event.mouseButton.button == sf::Mouse::Button::Right && isDragging )
-			{
-				window->setMouseCursorVisible( true );
-				isDragging = false;
-			}
-		}
 	}
 
 	void Draw()
 	{
 		// Projection matrix : 45° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-        cam.Projection = glm::perspective( glm::radians(45.0f), (float)800 / (float)600, 0.1f, 1000.0f );
+        cam.Projection = glm::perspective( glm::radians(45.0f), (float)window->getSize().x / (float)window->getSize().y, 0.1f, 1000.0f );
         
 		//pitch = 0;
 		//yaw = 180.0;
@@ -832,7 +1017,7 @@ class CStateSceneRenderer : public BaseToolState
 
 		//We have the movement code here, as we want to run it each frame.
 		//TODO: Scale with a deltatime value.
-		float speed = 0.5;
+		float speed = cameraSpeed;
 
 		//Get needed vectors for camera movement.
 		glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f); 
@@ -876,10 +1061,10 @@ class CStateSceneRenderer : public BaseToolState
 		if( bUseWireframe )
         	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-		//for( const auto & line : lines )
-		//{
-		//	line->Draw( cam );
-		//}
+		for( const auto & line : lines )
+		{
+			line->Draw( cam );
+		}
 
 		glUseProgram(0);
     
@@ -891,10 +1076,10 @@ class CStateSceneRenderer : public BaseToolState
 		//Proccess:
 
 		//Load MAC.
-		MACReader map( "EDFData/IG_EDFROOM01.MAC" );
+		MACReader map( "EDFData/IG_BASE502.MAC" );
 
 		//Load RAB archive
-		RABReader mdlArc( "EDFData/IG_EDFROOM01.RAB" );
+		RABReader mdlArc( "EDFData/IG_BASE502.RAB" );
 
 		//Lets be more effecient about this.
 		//Determine "Unique" models
@@ -902,18 +1087,25 @@ class CStateSceneRenderer : public BaseToolState
 		std::map < std::wstring, GLuint > mdbTextures;
 		for( int i = 0; i < map.modelNames.size(); ++i )
 		{
+			if( map.modelNames[i].size() == 0 )
+				continue;
+
 			if( mdbs.count( map.modelNames[i] ) == 0 )
 			{
 				std::wstring mdbName = map.modelNames[i];
 				mdbs[ mdbName ] = MDBReader( mdlArc.ReadFile( L"MODEL", mdbName ) );
+
+				if( mdbs[ mdbName ].model.objectscount == 0 ) //Bizzare edge case where a null model exists.
+					continue;
 
 				for( int j = 0; j < mdbs[ mdbName ].model.objects[0].meshcount; ++j )
 				{
 					if( mdbTextures.count( mdbs[ mdbName ].GetColourTextureFilename( 0, j ) ) == 0 )
 					{
 						std::vector< char > textureBytes;
-						textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", mdbs[ mdbName ].GetColourTextureFilename( 0, j ) );
-						mdbTextures[ mdbs[ mdbName ].GetColourTextureFilename( 0, j ) ] = LoadDDS_FromBuffer(textureBytes);
+						std::wstring texFileName = mdbs[ mdbName ].GetColourTextureFilename( 0, j );
+						textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", texFileName );
+						mdbTextures[ texFileName ] = LoadDDS_FromBuffer(textureBytes);
 						textureBytes.clear();
 					}
 				}
@@ -923,6 +1115,12 @@ class CStateSceneRenderer : public BaseToolState
 		//Least effecient modelloader ever made :)
 		for( int iter = 0; iter < map.modelNames.size(); ++iter )
 		{
+			if( map.modelNames[iter].size() == 0 )
+				continue;
+
+			if( mdbs[ map.modelNames[iter] ].model.objectscount == 0 ) //Bizzare edge case where a null model exists.
+					continue;
+
 			for( int i = 0; i < mdbs[ map.modelNames[iter] ].model.objects[0].meshcount; ++i )
 			{
 				meshs.push_back( std::make_unique<MeshObject>( 
@@ -935,6 +1133,28 @@ class CStateSceneRenderer : public BaseToolState
 				meshs.back()->position = map.positions[iter];
 				meshs.back()->angles = map.rotations[iter];
 			}
+		}
+
+		cameraSpeed = 0.5;
+
+		//Load RMPA
+		CRMPAReader rmpa( "EDFData/MISSION.RMPA" );
+		for( int i = 0; i < rmpa.spawnpoints.size(); ++i )
+		{
+			glm::vec3 pos( rmpa.spawnpoints[i].x, rmpa.spawnpoints[i].y, rmpa.spawnpoints[i].z );
+			glm::vec3 dir( rmpa.spawnpoints[i].fx, rmpa.spawnpoints[i].fy, rmpa.spawnpoints[i].fz );
+
+			lines.push_back( std::make_unique<CDebugLine>( pos, dir, glm::vec3( 0, 255, 0 ) ) );
+
+			//Create secondary lines to make the spoint point more obvious.
+			//Get needed vectors for camera movement.
+			glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f); 
+			glm::vec3 lineRight = glm::normalize(glm::cross(up, pos - dir));
+			glm::vec3 lineUp = glm::normalize(glm::cross(lineRight, pos - dir));
+
+			lines.push_back( std::make_unique<CDebugLine>( pos - (lineRight), pos + (lineRight), glm::vec3( 0, 0, 255 ) ) );
+			lines.push_back( std::make_unique<CDebugLine>( pos - (lineUp), pos + (lineUp), glm::vec3( 255, 255, 0 ) ) );
+
 		}
 
 		return;
@@ -967,7 +1187,7 @@ class CStateSceneRenderer : public BaseToolState
 	//Renderables:
 	std::vector< std::unique_ptr<MeshObject>> meshs;
 
-	//std::vector< std::unique_ptr<CDebugLine> > lines;
+	std::vector< std::unique_ptr<CDebugLine> > lines;
 
 	//Variables:
 	GLuint programID;
@@ -985,7 +1205,8 @@ class CStateSceneRenderer : public BaseToolState
 
 	//Control variables
 	sf::Vector2i mouseOldPos;
-	bool isDragging;
+	float cameraSpeed;
+	bool isMouseCamControl;
 };
 
 //Tool state is in "File Browser"
@@ -1074,44 +1295,27 @@ protected:
 	std::string path;
 };
 
-//2D UI Elements to overlay on the rendered screen
-class CBaseUIElement
+#include "GUI.h"
+
+//Simple labeled value implementation
+class CUILabelledValue : public CBaseUIElement
 {
 public:
-	void SetActive( bool active ) { bActive = active; };
-	virtual void HandleEvent( sf::Event e ){};
-	virtual void Draw( sf::RenderWindow *window ){};
-
-protected:
-	bool bActive;
-	sf::Vector2f vecPosition;
-};
-
-//Container with title.
-class CUITitledContainer : public CBaseUIElement
-{
-public:
-	CUITitledContainer(){};
-	CUITitledContainer( sf::Font &txtFont, std::string title )
+	CUILabelledValue(){};
+	CUILabelledValue( sf::Font &txtFont, std::string name )
 	{
-		float xSize = 100;
-		float ySize = 200;
+		txtLabelText = sf::Text( name, txtFont, 20 );
+		txtLabelText.setFillColor( sf::Color( 0, 255, 0 ) );
 
-		containerShape = sf::RectangleShape( sf::Vector2f( xSize, ySize ) );
-		containerShape.setFillColor( sf::Color::Black );
-		containerShape.setOutlineColor( sf::Color::Green );
-		containerShape.setOutlineThickness( -1 );
+		labelString = name;
+	};
 
-		containerTitle = sf::Text( title, txtFont, 20u );
+	void SetTrackedValue( float *value )
+	{
+		trackedValue = value;
 
-		float textX = ( xSize / 2.0f ) - (containerTitle.getGlobalBounds().width / 2.0f);
-		containerTitle.setPosition( textX, 0 );
-		containerTitle.setFillColor( sf::Color( 0, 255, 0 ) );
-
-		containerTitleShape = sf::RectangleShape( sf::Vector2f( xSize, containerTitle.getGlobalBounds().height * 2.0f ) );
-		containerTitleShape.setFillColor( sf::Color::Black );
-		containerTitleShape.setOutlineColor( sf::Color::Green );
-		containerTitleShape.setOutlineThickness( -1 );
+		oldValue = *trackedValue;
+		txtLabelText.setString( labelString + std::to_string( *value ) );
 	};
 
 	void Draw( sf::RenderWindow *window )
@@ -1119,84 +1323,30 @@ public:
 		if( !bActive )
 			return;
 
-		window->draw( containerShape );
-		window->draw( containerTitleShape );
-		window->draw( containerTitle );
+		//Check if tracked value has changed.
+		if( *trackedValue != oldValue )
+		{
+			txtLabelText.setString( labelString + std::to_string( *trackedValue ) );
+			oldValue = *trackedValue;
+		}
+
+		window->draw( txtLabelText );
+	};
+
+	void SetPosition( sf::Vector2f pos )
+	{
+		txtLabelText.setPosition( pos );
+		vecPosition = pos;
 	};
 
 protected:
-	sf::RectangleShape containerShape;
-	sf::RectangleShape containerTitleShape;
-	sf::Text containerTitle;
+	float oldValue;
+	float *trackedValue;
+
+	std::string labelString;
+	sf::Text txtLabelText;
 };
 
-class CUIButton : public CBaseUIElement
-{
-public:
-	CUIButton(){};
-	CUIButton( sf::Font &txtFont, std::string name )
-	{
-		float xSize = 100;
-		float ySize = 30;
-
-		buttonShape = sf::RectangleShape( sf::Vector2f( xSize, ySize ) );
-		buttonShape.setFillColor( sf::Color( 150, 150, 150 ) );
-		buttonShape.setOutlineColor( sf::Color( 200, 200, 200 ) );
-		buttonShape.setOutlineThickness( -1 );
-
-		buttonName = sf::Text( name, txtFont, 20u );
-		buttonName.setFillColor( sf::Color::Black );
-
-		float textX = ( xSize / 2.0f ) - ( buttonName.getGlobalBounds().width / 2.0f );
-		float textY = ( ySize / 2.0f ) - ( buttonName.getGlobalBounds().height );
-		buttonName.setPosition( textX, textY );
-
-		bIsMouseOver = false;
-	};
-	void HandleEvent( sf::Event e )
-	{
-		if( !bActive )
-			return;
-
-		if( e.type == sf::Event::MouseMoved ) //Highlight button when moused over.
-		{
-			if( buttonShape.getGlobalBounds().contains( sf::Vector2f( e.mouseMove.x, e.mouseMove.y ) ) )
-			{
-				buttonShape.setFillColor( sf::Color::Red );
-				bIsMouseOver = true;
-			}
-			else
-			{
-				buttonShape.setOutlineColor( sf::Color( 200, 200, 200 ) );
-				bIsMouseOver = false;
-			}
-		}
-
-		//Perform button action on click
-		else if( e.type == sf::Event::MouseButtonPressed )
-		{
-			if( e.mouseButton.button == sf::Mouse::Button::Left )
-			{
-				//Todo: Implement this.
-
-			}
-		}
-	}
-	void Draw( sf::RenderWindow *window )
-	{
-		if( !bActive )
-			return;
-
-		window->draw( buttonShape );
-		window->draw( buttonName );
-	};
-
-protected:
-	sf::RectangleShape buttonShape;
-	sf::Text buttonName;
-
-	bool bIsMouseOver;
-};
 
 //Temp UI test state
 class CStateUITest : public BaseToolState
@@ -1208,9 +1358,50 @@ public:
 
     	font.loadFromFile( "Font.ttf" );
 
-		ui1 = CUIButton( font, "TEST" );
+		ui1 = CUITitledContainer( font, "Menu 1", 200, 400 );
 		ui1.SetActive( true );
+
+		CUIButton *button1 = new CUIButton( font, "Load Model" );
+		button1->SetActive( true );
+		button1->SetCallback( [&]{Test();} );
+
+		ui1.AddElement( button1 );
+
+		CUIButton *button2 = new CUIButton( font, "Map Viewer" );
+		button2->SetActive( true );
+		button2->SetCallback( [&]{Test2();} );
+
+		ui1.AddElement( button2 );
+
+		testvalue = 0.5;
+
+		CUISlider *slider = new CUISlider( &testvalue, 0, 1, 150 );
+		slider->SetActive( true );
+
+		ui1.AddElement( slider );
+
+		CUILabelledValue *label = new CUILabelledValue( font, "Value: " );
+		label->SetActive( true );
+		label->SetTrackedValue( &testvalue );
+
+		ui1.AddElement( label );
 	}
+
+	void Test( )
+	{
+		GetOwner()->SetState( "browser" );
+	};
+
+	void Test2( )
+	{
+		//Nasty :)
+		CStateSceneRenderer *sceneRenderer = new CStateSceneRenderer( );
+		sceneRenderer->Init( window ); //Feed the state a ptr to the sf window and initialise.
+		sceneRenderer->LoadScene();
+
+		GetOwner()->AddState( "scene", sceneRenderer );
+		GetOwner()->SetState( "scene" );
+	};
 
 	void ProccessEvent( sf::Event event )
 	{
@@ -1229,7 +1420,8 @@ public:
 	};
 
 	sf::Font font;
-	CUIButton ui1;
+	CUITitledContainer ui1;
+	float testvalue;
 };
 
 //##############################################################
@@ -1239,10 +1431,9 @@ int main()
 {
     //std::cout << "Test:\n";
 
-    //RABReader modelArc( "AIRTORTOISE_MISSILE.RAB" );
+	//CRMPAReader reader( "EDFData/MISSION.RMPA" );
 
-    //MDBReader reader( "model2.mdb" );
-    //MDBReader reader( modelArc.ReadFile( L"MODEL", L"airtortoise_missile.mdb" ) );
+	//return 0;
 
     //SFML Setup.
     sf::ContextSettings settings;
@@ -1252,7 +1443,11 @@ int main()
     settings.majorVersion = 3;
     settings.minorVersion = 0;
 
-    sf::RenderWindow window( sf::VideoMode(800, 600), "MDB Viewer", sf::Style::Default, settings );
+	//TODO: Load from config file
+	int resolutionX = 800;
+	int resolutionY = 600;
+
+    sf::RenderWindow window( sf::VideoMode(resolutionX, resolutionY), "MDB Viewer", sf::Style::Default, settings );
 
 	//Init shader list:
 	ShaderList::Initialize();
@@ -1272,16 +1467,16 @@ int main()
 	//sceneRenderer->Init( &window ); //Feed the state a ptr to the sf window and initialise.
 	//sceneRenderer->LoadScene();
 
-	//BaseToolState *testState = new CStateUITest( );
-	//testState->Init( &window ); //Feed the state a ptr to the sf window and initialise.
+	BaseToolState *testState = new CStateUITest( );
+	testState->Init( &window ); //Feed the state a ptr to the sf window and initialise.
 
 	states->AddState( "browser", fileBrowser );
 	states->AddState( "viewer", mdlRenderer );
-	//states->AddState( "uitest", testState );
+	states->AddState( "uitest", testState );
 	//states->AddState( "scene", sceneRenderer );
 
 	//Set default state
-	states->SetState( "browser" );
+	states->SetState( "uitest" );
 
     //MAIN LOOP
     while (window.isOpen())
@@ -1289,6 +1484,12 @@ int main()
         sf::Event event;
         while( window.pollEvent(event) )
         {
+			if( event.type == sf::Event::Resized )
+			{
+				//Resize SF viewport
+				sf::FloatRect visibleArea(0, 0, event.size.width, event.size.height);
+    			window.setView( sf::View(visibleArea) );
+			}
             if( event.type == sf::Event::Closed )
                 window.close();
             

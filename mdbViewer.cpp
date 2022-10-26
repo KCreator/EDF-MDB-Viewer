@@ -371,9 +371,15 @@ public:
 			//Attempt to use this table offset.
 			int table1Pos = pos + offs;
 
+			int unk0 = ReadInt( &buffer, table1Pos );
+
 			int sgoOffs = ReadInt( &buffer, table1Pos + 0x4 );
 			int strOffs = ReadInt( &buffer, table1Pos + 0xc );
 			std::wstring name = ReadUnicode( &buffer, table1Pos + 0xc + strOffs, false );
+
+			size_t dotPos = name.find_last_of( L"." );
+			std::wstring test = name.substr( 0, dotPos );
+			modelNames2.push_back( test );
 			//std::wcout << name + L"\n"; //Debugging.
 
 			//Try to read some key data from the SGO (TODO: Write SGO handler)
@@ -475,6 +481,8 @@ public:
 		pos = objectTable1Offs;
 		for( int j = 0; j < objectTable1Count; ++j )
 		{
+			int base = pos;
+
 			//Read:
 			//std::cout << "Var: ";
 			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x00 ) ) + ",";
@@ -485,12 +493,30 @@ public:
 			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x14 ) ) + ",";
 			//std::cout << std::to_string( ReadInt( &buffer, pos + 0x18 ) ) + "\n";
 
-			int offset1 = ReadInt( &buffer, pos + 0x04 );
+			int unk0 = ReadInt( &buffer, pos );
+			pos += 0x4;
+
+			int offset1 = ReadInt( &buffer, pos );
 
 			if( offset1 != 0 )
 			{
 				//std::cout << "4th table value: " + std::to_string( ReadInt( &buffer, pos + offset1 ) ) + "\n";
 				int test = offset1 + ReadInt( &buffer, pos + offset1 );
+
+				int positionsOffs = ReadInt( &buffer, pos + test + 0x10 );
+				if( positionsOffs != 0 )
+				{
+					int localPos = pos + test + positionsOffs;
+					float x = ReadFloat( &buffer, localPos, true );
+					float y = ReadFloat( &buffer, localPos + 0x4, true );
+					float z = ReadFloat( &buffer, localPos + 0x8, true );
+
+					submodelPositionOffsets.push_back( glm::vec3( x, y, z ) );
+				}
+				else
+				{
+					submodelPositionOffsets.push_back( glm::vec3( 0, 0, 0 ) );
+				}
 
 				int namOfs = ReadInt( &buffer, pos + test + 0x20 );
 				std::wstring tname = ReadUnicode( &buffer, pos + test + namOfs, false );
@@ -503,13 +529,9 @@ public:
 				modelNames.push_back( L"" ); //Store for later...
 			}
 
-			pos += 0x1c;
-			continue;
+			//pos += 0x1c;
+			//continue;
 
-			int unk0 = ReadInt( &buffer, pos );
-			pos += 0x4;
-
-			int ofsTable = ReadInt( &buffer, pos );
 			pos += 0x4;
 
 			int unk1 = ReadInt( &buffer, pos );
@@ -518,15 +540,17 @@ public:
 			float unk2 = ReadFloat( &buffer, pos );
 			pos += 0x4;
 
+			//Sub model name?
 			int mdbNameOfs = ReadInt( &buffer, pos );
-			std::wstring name = ReadUnicode( &buffer, objectStringTableOffs + mdbNameOfs, false );
-			std::wcout << name + L"\n"; //Debugging.
+			std::wstring name = ReadUnicode( &buffer, base + mdbNameOfs, false );
+			//std::wcout << name + L"\n"; //Debugging.
+			subModelNames.push_back( name );
 
 			pos += 0x4;
 
 			int hktNameOfs = ReadInt( &buffer, pos );
-			name = ReadUnicode( &buffer, objectStringTableOffs + hktNameOfs, false );
-			std::wcout << name + L"\n"; //Debugging.
+			name = ReadUnicode( &buffer, base + hktNameOfs, false );
+			//std::wcout << name + L"\n"; //Debugging.
 
 			pos += 0x4;
 			pos += 0x4;
@@ -563,8 +587,12 @@ public:
 	}
 
 	//Temp:
+	//This needs to be redone...
 	std::vector< std::wstring > modelNames;
+	std::vector< std::wstring > modelNames2;
+	std::vector< std::wstring > subModelNames;
 	std::vector< glm::vec3 > positions;
+	std::vector< glm::vec3 > submodelPositionOffsets;
 	std::vector< glm::vec3 > rotations;
 };
 
@@ -847,6 +875,7 @@ class CStateModelRenderer : public BaseToolState
 		{
 			//Load RAB archive
 			RABReader mdlArc( ipath.c_str() );
+			
 			std::wstring fileName;
 
 			//find first model in RAB archive. TODO: Allow user to select this, somehow?
@@ -1075,11 +1104,30 @@ class CStateSceneRenderer : public BaseToolState
 	{
 		//Proccess:
 
+		std::string path = "EDFData/IG_BASE502";
+		//std::string path = "EDFData/IG_EDFROOM01";
+
 		//Load MAC.
-		MACReader map( "EDFData/IG_BASE502.MAC" );
+		MACReader map( ( path + ".MAC" ).c_str() );
 
 		//Load RAB archive
-		RABReader mdlArc( "EDFData/IG_BASE502.RAB" );
+		RABReader mdlArc( ( path + ".RAB" ).c_str() );
+
+		//Compare map object strings, replace with "true" object when I can.
+		if( map.modelNames.size() == map.modelNames2.size() )
+		{
+			for( int i = 0; i < map.modelNames.size(); ++i )
+			{
+				for( int j = 0; j < mdlArc.files.size(); ++j )
+				{
+					if( mdlArc.files[j].folder == L"MODEL" && mdlArc.files[j].name == map.modelNames2[i] + L".mdb" )
+					{
+						//Should do this elsewere.
+						map.modelNames[i] = map.modelNames2[i] + L".mdb";
+					}
+				}
+			}
+		}
 
 		//Lets be more effecient about this.
 		//Determine "Unique" models
@@ -1098,15 +1146,46 @@ class CStateSceneRenderer : public BaseToolState
 				if( mdbs[ mdbName ].model.objectscount == 0 ) //Bizzare edge case where a null model exists.
 					continue;
 
-				for( int j = 0; j < mdbs[ mdbName ].model.objects[0].meshcount; ++j )
+				for( int o = 0; o < mdbs[ mdbName ].model.objectscount; ++o )
 				{
-					if( mdbTextures.count( mdbs[ mdbName ].GetColourTextureFilename( 0, j ) ) == 0 )
+					for( int j = 0; j < mdbs[ mdbName ].model.objects[o].meshcount; ++j )
 					{
-						std::vector< char > textureBytes;
-						std::wstring texFileName = mdbs[ mdbName ].GetColourTextureFilename( 0, j );
-						textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", texFileName );
-						mdbTextures[ texFileName ] = LoadDDS_FromBuffer(textureBytes);
-						textureBytes.clear();
+						if( mdbTextures.count( mdbs[ mdbName ].GetColourTextureFilename( o, j ) ) == 0 )
+						{
+							std::vector< char > textureBytes;
+							std::wstring texFileName = mdbs[ mdbName ].GetColourTextureFilename( o, j );
+							textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", texFileName );
+							mdbTextures[ texFileName ] = LoadDDS_FromBuffer(textureBytes);
+							textureBytes.clear();
+						}
+					}
+				}
+			}
+
+			//Load submodel, if available.
+			if( map.subModelNames[i].size() > 0 )
+			{
+				if( mdbs.count( map.subModelNames[i] ) == 0 )
+				{
+					std::wstring mdbName = map.subModelNames[i];
+					mdbs[ mdbName ] = MDBReader( mdlArc.ReadFile( L"MODEL", mdbName ) );
+
+					if( mdbs[ mdbName ].model.objectscount == 0 ) //Bizzare edge case where a null model exists.
+						continue;
+
+					for( int o = 0; o < mdbs[ mdbName ].model.objectscount; ++o )
+					{
+						for( int j = 0; j < mdbs[ mdbName ].model.objects[o].meshcount; ++j )
+						{
+							if( mdbTextures.count( mdbs[ mdbName ].GetColourTextureFilename( o, j ) ) == 0 )
+							{
+								std::vector< char > textureBytes;
+								std::wstring texFileName = mdbs[ mdbName ].GetColourTextureFilename( o, j );
+								textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", texFileName );
+								mdbTextures[ texFileName ] = LoadDDS_FromBuffer(textureBytes);
+								textureBytes.clear();
+							}
+						}
 					}
 				}
 			}
@@ -1119,19 +1198,42 @@ class CStateSceneRenderer : public BaseToolState
 				continue;
 
 			if( mdbs[ map.modelNames[iter] ].model.objectscount == 0 ) //Bizzare edge case where a null model exists.
-					continue;
+				continue;
 
-			for( int i = 0; i < mdbs[ map.modelNames[iter] ].model.objects[0].meshcount; ++i )
+			for( int o = 0; o < mdbs[ map.modelNames[iter] ].model.objectscount; ++o )
 			{
-				meshs.push_back( std::make_unique<MeshObject>( 
-					mdbs[ map.modelNames[iter] ].GetMeshPositionVertices(0, i), 
-					mdbs[ map.modelNames[iter] ].GetMeshIndices(0, i), 
-					mdbs[ map.modelNames[iter] ].GetMeshUVs( 0, i ), 
-					programID, 
-					mdbTextures[mdbs[ map.modelNames[iter] ].GetColourTextureFilename( 0, i ) ] ) );
+				for( int i = 0; i < mdbs[ map.modelNames[iter] ].model.objects[o].meshcount; ++i )
+				{
+					meshs.push_back( std::make_unique<MeshObject>( 
+						mdbs[ map.modelNames[iter] ].GetMeshPositionVertices(o, i), 
+						mdbs[ map.modelNames[iter] ].GetMeshIndices(o, i), 
+						mdbs[ map.modelNames[iter] ].GetMeshUVs( o, i ), 
+						programID, 
+						mdbTextures[mdbs[ map.modelNames[iter] ].GetColourTextureFilename( o, i ) ] ) );
 
-				meshs.back()->position = map.positions[iter];
-				meshs.back()->angles = map.rotations[iter];
+					meshs.back()->position = map.positions[iter];
+					meshs.back()->angles = map.rotations[iter];
+				}
+			}
+
+			//Load submodel, if available.
+			if( map.subModelNames[iter].size() > 0 )
+			{
+				for( int o = 0; o < mdbs[ map.subModelNames[iter] ].model.objectscount; ++o )
+				{
+					for( int i = 0; i < mdbs[ map.subModelNames[iter] ].model.objects[o].meshcount; ++i )
+					{
+						meshs.push_back( std::make_unique<MeshObject>( 
+							mdbs[ map.subModelNames[iter] ].GetMeshPositionVertices(o, i), 
+							mdbs[ map.subModelNames[iter] ].GetMeshIndices(o, i), 
+							mdbs[ map.subModelNames[iter] ].GetMeshUVs( o, i ), 
+							programID, 
+							mdbTextures[mdbs[ map.subModelNames[iter] ].GetColourTextureFilename( o, i ) ] ) );
+
+						meshs.back()->position = map.positions[iter] + map.submodelPositionOffsets[iter];
+						meshs.back()->angles = map.rotations[iter];
+					}
+				}
 			}
 		}
 
@@ -1302,12 +1404,14 @@ class CUILabelledValue : public CBaseUIElement
 {
 public:
 	CUILabelledValue(){};
-	CUILabelledValue( sf::Font &txtFont, std::string name )
+	CUILabelledValue( sf::Font &txtFont, std::string name, unsigned int fontSize = 20U )
 	{
-		txtLabelText = sf::Text( name, txtFont, 20 );
+		txtLabelText = sf::Text( name, txtFont, fontSize );
 		txtLabelText.setFillColor( sf::Color( 0, 255, 0 ) );
 
 		labelString = name;
+
+		recBounds = txtLabelText.getGlobalBounds();
 	};
 
 	void SetTrackedValue( float *value )
@@ -1324,10 +1428,13 @@ public:
 			return;
 
 		//Check if tracked value has changed.
-		if( *trackedValue != oldValue )
+		if( trackedValue != NULL )
 		{
-			txtLabelText.setString( labelString + std::to_string( *trackedValue ) );
-			oldValue = *trackedValue;
+			if( *trackedValue != oldValue )
+			{
+				txtLabelText.setString( labelString + std::to_string( *trackedValue ) );
+				oldValue = *trackedValue;
+			}
 		}
 
 		window->draw( txtLabelText );
@@ -1337,6 +1444,8 @@ public:
 	{
 		txtLabelText.setPosition( pos );
 		vecPosition = pos;
+
+		recBounds = txtLabelText.getGlobalBounds();
 	};
 
 protected:
@@ -1373,9 +1482,9 @@ public:
 
 		ui1.AddElement( button2 );
 
-		testvalue = 0.5;
+		testvalue = 45;
 
-		CUISlider *slider = new CUISlider( &testvalue, 0, 1, 150 );
+		CUISlider *slider = new CUISlider( &testvalue, 1, 90, 150 );
 		slider->SetActive( true );
 
 		ui1.AddElement( slider );

@@ -10,9 +10,11 @@ public:
 	virtual void SetPosition( sf::Vector2f newPos ){};
 
 	sf::Vector2f GetPosition(){ return vecPosition; };
+	sf::FloatRect GetBounds(){ return recBounds; };
 protected:
 	bool bActive;
 	sf::Vector2f vecPosition;
+	sf::FloatRect recBounds;
 };
 
 //Container with title.
@@ -44,7 +46,7 @@ class CUIButton : public CBaseUIElement
 {
 public:
 	CUIButton(){};
-	CUIButton( sf::Font &txtFont, std::string name );
+	CUIButton( sf::Font &txtFont, std::string name, float xSize = 150, float ySize = 30, unsigned int textSize = 20U );
 
 	void SetPosition( sf::Vector2f pos );
 

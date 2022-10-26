@@ -56,6 +56,10 @@ short ReadShort( std::vector<char> *buf, int pos )
 //Read unsigned int (short) from byte buffer
 unsigned short ReadUShort( std::vector<char> *buf, int pos )
 {
+    //Error checking:
+    if( pos >= buf->size() - 1 )
+        return 0;
+
     unsigned char chunk[2];
 
 	chunk[0] = buf->at( pos );

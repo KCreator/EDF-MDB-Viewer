@@ -34,7 +34,11 @@ CUITitledContainer::CUITitledContainer( sf::Font &txtFont, std::string title, fl
 //Adds an element to the container
 void CUITitledContainer::AddElement( CBaseUIElement *element )
 {
-	float yOffset = containedElements.size() * 32;
+	float yOffset = 0;
+	for( int i = 0; i < containedElements.size(); ++i )
+	{
+		yOffset += containedElements[i]->GetBounds().height + 2;
+	}
 
 	element->SetPosition( GetPosition() + sf::Vector2f( 4, containerTitleShape.getGlobalBounds().height + 4 + yOffset ) );
 
@@ -72,17 +76,14 @@ void CUITitledContainer::Draw( sf::RenderWindow *window )
 //##################################################
 
 //Constructor
-CUIButton::CUIButton( sf::Font &txtFont, std::string name )
+CUIButton::CUIButton( sf::Font &txtFont, std::string name, float xSize, float ySize, unsigned int textSize )
 {
-	float xSize = 150;
-	float ySize = 30;
-
 	buttonShape = sf::RectangleShape( sf::Vector2f( xSize, ySize ) );
 	buttonShape.setFillColor( sf::Color( 150, 150, 150 ) );
 	buttonShape.setOutlineColor( sf::Color( 200, 200, 200 ) );
 	buttonShape.setOutlineThickness( -1 );
 
-	buttonName = sf::Text( name, txtFont, 20u );
+	buttonName = sf::Text( name, txtFont, textSize );
 	buttonName.setFillColor( sf::Color::Black );
 
 	float textX = ( xSize / 2.0f ) - ( buttonName.getGlobalBounds().width / 2.0f );
@@ -90,6 +91,8 @@ CUIButton::CUIButton( sf::Font &txtFont, std::string name )
 	buttonName.setPosition( textX, textY );
 
 	bIsMouseOver = false;
+
+	recBounds = sf::FloatRect( vecPosition, sf::Vector2f( xSize, ySize ) );
 };
 
 //Set button position, and update the position of elememts that comprise the button.
@@ -99,6 +102,10 @@ void CUIButton::SetPosition( sf::Vector2f pos )
 	buttonName.setPosition( buttonName.getPosition() + ( pos - vecPosition ) );
 
 	vecPosition = pos;
+
+	//Update bounds position:
+	recBounds.top = pos.y;
+	recBounds.left = pos.x;
 };
 
 //Handle Events
@@ -176,10 +183,13 @@ CUISlider::CUISlider( float *value, float low, float high, float size )
 		//Set slider to a default position based on the controlled value:
 		float upperBounds = shpSliderBG.getGlobalBounds().width - shpSlider.getGlobalBounds().width;
 
-		float v1 = (low + (*value * ( high-low )));
+		float v1 = ( ( ( *value ) / ( high + low ) ) );
 
 		shpSlider.setPosition( v1 * upperBounds, 0 );
 	}
+
+	//Set bounds:
+	recBounds = sf::FloatRect( vecPosition, sf::Vector2f( shpSliderBG.getGlobalBounds().width, shpSlider.getGlobalBounds().height ) );
 
 	//Standard init:
 	isDragging = false;
@@ -263,4 +273,8 @@ void CUISlider::SetPosition( sf::Vector2f pos )
 	shpSliderBG.setPosition( shpSliderBG.getPosition() + ( pos - vecPosition ) );
 
 	vecPosition = pos;
+
+	//Update bounds position:
+	recBounds.top = pos.y;
+	recBounds.left = pos.x;
 };

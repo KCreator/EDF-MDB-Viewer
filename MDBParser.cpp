@@ -126,6 +126,8 @@ void MDBReader::Parse( )
     pos = iObjectTableOffs;
     for( int i = 0; i < model.objectscount ; ++i )
     {
+        int base = pos;
+
         MDBObject obj;
 
         //Object Index
@@ -145,7 +147,7 @@ void MDBReader::Parse( )
         pos += 4;
 
         //Read Mesh Info:
-        int meshpos = iObjectTableOffs + meshOfs;
+        int meshpos = base + meshOfs;
 
         ReadMeshInfo( obj, meshpos );
 
@@ -538,6 +540,7 @@ std::vector< glm::vec2 > MDBReader::GetMeshUVs( int objNum, int meshNum )
 
     //Access relevant vector and translate to vertex vec3
     MDBMeshInfo *mesh = &model.objects[objNum].meshs[meshNum];
+
     for( int i = 0; i < mesh->vertexdata[ "texcoord0" ].size(); i += 2 ) //This should be fine in most cases. However, I should test for "type"
     {
         float x = mesh->vertexdata[ "texcoord0" ][i];
@@ -579,6 +582,10 @@ std::wstring MDBReader::GetColourTextureFilename( int objNum, int meshNum )
 
     //Look up Material:
     int materialID = model.objects[ objNum ].meshs[ meshNum ].material;
+
+    //Safty check.
+    if( materialID > model.materialscount )
+        return returnValue;
 
     for( int i = 0; i < model.materials[ materialID ].textureCount; ++i )
     {

@@ -1,7 +1,7 @@
 #pragma once //Compile this once.
 
 //CMPL Decompressor
-std::vector< char > CMPLDecompress( std::vector< char > in );
+std::vector< char > CMPLDecompress( std::vector< char > in, bool verbose );
 
 struct RABFile
 {

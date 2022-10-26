@@ -6,7 +6,7 @@
 #include "RAB.h"
 
 //CMPL Decompressor
-std::vector< char > CMPLDecompress( std::vector< char > data )
+std::vector< char > CMPLDecompress( std::vector< char > data, bool verbose )
 {
 	//Check header:
 	if( data[0] != 'C' && data[1] != 'M' && data[2] != 'P' && data[3] != 'L' )
@@ -14,7 +14,7 @@ std::vector< char > CMPLDecompress( std::vector< char > data )
 		std::wcout << L"FILE IS NOT CMPL COMPRESSED!\n";
 		return data;
 	}
-	else
+	else if ( verbose )
 		std::wcout << L"BEGINNING DECOMPRESSION\n";
 
 	//Variables
@@ -95,7 +95,8 @@ std::vector< char > CMPLDecompress( std::vector< char > data )
 
 	if( out.size( ) == desiredSize )
 	{
-		std::wcout << L"FILE SIZE MATCH! " + std::to_wstring( desiredSize ) + L" bytes expected, got " + std::to_wstring( (int)out.size( ) ) +  L" DECOMPRESSION SUCCESSFUL!\n";
+		if( verbose )
+			std::wcout << L"FILE SIZE MATCH! " + std::to_wstring( desiredSize ) + L" bytes expected, got " + std::to_wstring( (int)out.size( ) ) +  L" DECOMPRESSION SUCCESSFUL!\n";
 	}
 	else
 		std::wcout << L"FILE SIZE MISMATCH! " + std::to_wstring( desiredSize ) + L" bytes expected, got " + std::to_wstring( (int)out.size( ) ) + L" DECOMPRESSION FAILED!\n";
@@ -246,7 +247,7 @@ std::vector< char > RABReader::ReadFile( std::wstring folder, std::wstring file 
 			{
 				compressedBytes.push_back(data[files[i].position + j]);
 			}
-			uncompressedBytes = CMPLDecompress( compressedBytes );
+			uncompressedBytes = CMPLDecompress( compressedBytes, false );
 			compressedBytes.clear();
 
 			return uncompressedBytes;

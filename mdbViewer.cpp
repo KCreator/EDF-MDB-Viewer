@@ -830,10 +830,13 @@ class CStateModelRenderer : public BaseToolState
 		if( bUseWireframe )
         	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-		//for( const auto & line : lines )
-		//{
-		//	line->Draw( cam );
-		//}
+		//Render these above all else
+		glDepthFunc( GL_ALWAYS );
+		for( const auto & line : lines )
+		{
+			line->Draw( cam );
+		}
+		glDepthFunc( GL_LEQUAL );
 
 		glUseProgram(0);
 
@@ -905,10 +908,48 @@ class CStateModelRenderer : public BaseToolState
 
 				meshs.push_back( std::make_unique<MeshObject>( model.GetMeshPositionVertices(0, i), model.GetMeshIndices(0, i), model.GetMeshUVs( 0, i ), programID, LoadDDS_FromBuffer(textureBytes) ) );
 			}
+
+			//Camera angle for looking at humanoid bones.
+			cameraPosition = glm::vec3( 0, 3, 2 );
+
+			//Attempt to generate bones.
+			std::vector< glm::mat4 > boneWorldTransforms;
+
+			for( int i = 0; i < model.model.bonescount; ++i )
+			{
+				if( model.model.bones[i].boneParent != -1 )
+				{
+					//Obvious, in retrospect. Each bone transforms itself relative to its parent to get its actual coords.
+					//However, the extra data is unknown.
+
+					int parentIndex = model.model.bones[ model.model.bones[i].boneParent ].boneIndex;
+					glm::vec4 pos1 = glm::vec4( 0.0f );
+					glm::vec4 pos2 = glm::vec4( 0.0f );
+
+					pos1.w = 1;
+					pos2.w = 1;
+
+					boneWorldTransforms.push_back( boneWorldTransforms[parentIndex] * model.model.bones[i].matrix );
+
+					pos1 = boneWorldTransforms[parentIndex] * pos1;
+					pos2 = boneWorldTransforms[i] * pos2;
+
+					lines.push_back( std::make_unique<CDebugLine>( pos1, pos2, glm::vec3( 0, 255, 0 ) ) );
+
+					//Visualise the "Reset to zero" transform
+					//pos2 = model.model.bones[i].matrix2 * pos2;
+					//lines.push_back( std::make_unique<CDebugLine>( pos1, pos2, glm::vec3( 255, 255, 0 ) ) );
+				}
+				else
+				{
+					boneWorldTransforms.push_back( model.model.bones[i].matrix );
+				}
+			}
 		}
 	}
 
 	protected:
+
 	//Renderables:
 	sf::Font font;
 	sf::Text text;
@@ -916,7 +957,7 @@ class CStateModelRenderer : public BaseToolState
 
 	std::vector< std::unique_ptr<MeshObject>> meshs;
 
-	//std::vector< std::unique_ptr<CDebugLine> > lines;
+	std::vector< std::unique_ptr<CDebugLine> > lines;
 
 	//Variables:
 	std::string strReadoutText;

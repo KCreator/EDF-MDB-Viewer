@@ -85,41 +85,120 @@ void MDBReader::Parse( )
         MDBBone bone;
 
         //Bone Index
-        bone.boneIndex = ReadInt( &mdbBytes, pos );
+        bone.boneIndex = ReadInt( &mdbBytes, pos ); //0x0
         pos += 0x4;
 
         //std::wcout << L"Bone? " + model.names[ bone.boneIndex ] + L"\n";
 
         //Bone Parent
-        bone.boneParent = ReadInt( &mdbBytes, pos );
+        bone.boneParent = ReadInt( &mdbBytes, pos ); //0x4
         pos += 0x4;
 
         //Currently unknown x3
-        bone.unk0 = ReadInt( &mdbBytes, pos );
+        bone.unk0 = ReadInt( &mdbBytes, pos ); //0x8
         pos += 0x4;
 
-        bone.unk1 = ReadInt( &mdbBytes, pos );
+        bone.unk1 = ReadInt( &mdbBytes, pos ); //0xc
         pos += 0x4;
 
-        bone.unk2 = ReadInt( &mdbBytes, pos );
+        int boneNameIndex = ReadInt( &mdbBytes, pos ); //0x10
+        bone.name = model.names[ boneNameIndex ];
         pos += 0x4;
 
+        //0x14
         pos += 12;
 
+        //0x20
+
         //Bone transformations
-        pos += 0x40;
-        pos += 0x40;
+        float px = ReadFloat( &mdbBytes, pos, true );
+        float py = ReadFloat( &mdbBytes, pos + 0x04, true );
+        float pz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        float pw = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        pos += 0x10; //0x30
+
+        float rx = ReadFloat( &mdbBytes, pos, true );
+        float ry = ReadFloat( &mdbBytes, pos + 0x04, true );
+        float rz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        float rw = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        pos += 0x10; //0x40
+
+        float sx = ReadFloat( &mdbBytes, pos, true );
+        float sy = ReadFloat( &mdbBytes, pos + 0x04, true );
+        float sz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        float sw = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        pos += 0x10; //0x50
+
+        float wx = ReadFloat( &mdbBytes, pos, true );
+        float wy = ReadFloat( &mdbBytes, pos + 0x04, true );
+        float wz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        float ww = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        //construct matrix?
+        bone.matrix = { px, py, pz, pw, rx, ry, rz, rw, sx, sy, sz, sw, wx, wy, wz, ww };
+
+        pos += 0x10; //0x60
+
+        //Bone transformations 2
+        px = ReadFloat( &mdbBytes, pos, true );
+        py = ReadFloat( &mdbBytes, pos + 0x04, true );
+        pz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        pw = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        pos += 0x10; //0x30
+
+        rx = ReadFloat( &mdbBytes, pos, true );
+        ry = ReadFloat( &mdbBytes, pos + 0x04, true );
+        rz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        rw = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        pos += 0x10; //0x40
+
+        sx = ReadFloat( &mdbBytes, pos, true );
+        sy = ReadFloat( &mdbBytes, pos + 0x04, true );
+        sz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        sw = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        pos += 0x10; //0x50
+
+        wx = ReadFloat( &mdbBytes, pos, true );
+        wy = ReadFloat( &mdbBytes, pos + 0x04, true );
+        wz = ReadFloat( &mdbBytes, pos + 0x08, true );
+        ww = ReadFloat( &mdbBytes, pos + 0x0c, true );
+
+        //construct matrix?
+        bone.matrix2 = { px, py, pz, pw, rx, ry, rz, rw, sx, sy, sz, sw, wx, wy, wz, ww };
+
+        pos += 0x10; //0x60
 
         //TEMP
-        //float x = ReadFloat( &mdbBytes, pos, true );
-        //float y = ReadFloat( &mdbBytes, pos + 4, true );
-        //float z = ReadFloat( &mdbBytes, pos + 8, true );
-        //float w = ReadFloat( &mdbBytes, pos + 12, true );
+        //Coords?
+        float x = ReadFloat( &mdbBytes, pos, true );
+        float y = ReadFloat( &mdbBytes, pos + 4, true );
+        float z = ReadFloat( &mdbBytes, pos + 8, true );
+        float w = ReadFloat( &mdbBytes, pos + 12, true );
         //bonepos.push_back( glm::vec3( x, y ,z ) );
+        bone.x = x;
+        bone.y = y;
+        bone.z = z;
+        bone.w = w;
 
         //UNK
         pos += 0x10;
+
+        x = ReadFloat( &mdbBytes, pos, true );
+        y = ReadFloat( &mdbBytes, pos + 4, true );
+        z = ReadFloat( &mdbBytes, pos + 8, true );
+        w = ReadFloat( &mdbBytes, pos + 12, true );
+
+        bone.test1 = glm::vec4( x, y, z, w );
+
         pos += 0x10;
+
+        model.bones.push_back( bone );
     }
 
     //Read Object Tables

@@ -90,8 +90,20 @@ struct MDBBone
     int boneParent;
     int unk0;
     int unk1;
+    std::wstring name;
     int unk2;
+
     //Transformation matrix.
+    glm::mat4 matrix;
+    glm::mat4 matrix2;
+
+    glm::vec4 test1;
+
+    //Coords?
+    float x;
+    float y;
+    float z;
+    float w;
 };
 
 //The main MDB storage structure, holds all data extracted from the file.

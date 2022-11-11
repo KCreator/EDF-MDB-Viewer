@@ -9,7 +9,7 @@
 //##################################################
 
 //Constructor
-CUITitledContainer::CUITitledContainer( sf::Font &txtFont, std::string title, float sizeX, float sizeY )
+CUITitledContainer::CUITitledContainer( sf::Font &txtFont, std::string title, float sizeX, float sizeY, bool horizontal )
 {
 	xSize = sizeX;
 	ySize = sizeY;
@@ -29,18 +29,35 @@ CUITitledContainer::CUITitledContainer( sf::Font &txtFont, std::string title, fl
 	containerTitleShape.setFillColor( sf::Color::Black );
 	containerTitleShape.setOutlineColor( sf::Color::Green );
 	containerTitleShape.setOutlineThickness( -1 );
+
+	bHorizontalAligned = horizontal;
 };
 
 //Adds an element to the container
 void CUITitledContainer::AddElement( CBaseUIElement *element )
 {
-	float yOffset = 0;
-	for( int i = 0; i < containedElements.size(); ++i )
-	{
-		yOffset += containedElements[i]->GetBounds().height + 2;
-	}
+	float spacing = 2; //TODO: Make this configurable.
 
-	element->SetPosition( GetPosition() + sf::Vector2f( 4, containerTitleShape.getGlobalBounds().height + 4 + yOffset ) );
+	if( bHorizontalAligned )
+	{
+		float xOffset = 0;
+		for( int i = 0; i < containedElements.size(); ++i )
+		{
+			xOffset += containedElements[i]->GetBounds().width + spacing;
+		}
+
+		element->SetPosition( GetPosition() + sf::Vector2f( 4 + xOffset, containerTitleShape.getGlobalBounds().height + 4 ) );
+	}
+	else
+	{
+		float yOffset = 0;
+		for( int i = 0; i < containedElements.size(); ++i )
+		{
+			yOffset += containedElements[i]->GetBounds().height + spacing;
+		}
+
+		element->SetPosition( GetPosition() + sf::Vector2f( 4, containerTitleShape.getGlobalBounds().height + 4 + yOffset ) );
+	}
 
 	containedElements.push_back( element );
 }
@@ -70,6 +87,26 @@ void CUITitledContainer::Draw( sf::RenderWindow *window )
 	}
 };
 
+//Set position, and update the position of elements that comprise the container.
+void CUITitledContainer::SetPosition( sf::Vector2f pos )
+{
+	containerShape.setPosition( containerShape.getPosition() + ( pos - vecPosition ) );
+	containerTitleShape.setPosition( containerTitleShape.getPosition() + ( pos - vecPosition ) );
+	containerTitle.setPosition( containerTitle.getPosition() + ( pos - vecPosition ) );
+
+	//Update positions of everything in the list
+	for( int i = 0; i < containedElements.size(); ++i )
+	{
+		containedElements[i]->SetPosition( containedElements[i]->GetPosition() + ( pos - vecPosition ) );
+	}
+
+	vecPosition = pos;
+
+	//Update bounds position:
+	recBounds.top = pos.y;
+	recBounds.left = pos.x;
+};
+
 //##################################################
 // class: CUIButton
 // desc: Simple button implementation
@@ -91,6 +128,7 @@ CUIButton::CUIButton( sf::Font &txtFont, std::string name, float xSize, float yS
 	buttonName.setPosition( textX, textY );
 
 	bIsMouseOver = false;
+	bHasCallback = false;
 
 	recBounds = sf::FloatRect( vecPosition, sf::Vector2f( xSize, ySize ) );
 };
@@ -134,7 +172,7 @@ void CUIButton::HandleEvent( sf::Event e )
 		if( e.mouseButton.button == sf::Mouse::Button::Left )
 		{
 			//Todo: Implement this.
-			if( bIsMouseOver )
+			if( bIsMouseOver && bHasCallback )
 				callback( );
 		}
 	}
@@ -154,6 +192,7 @@ void CUIButton::Draw( sf::RenderWindow *window )
 void CUIButton::SetCallback(std::function< void( ) > icallback )
 {
 	callback = icallback;
+	bHasCallback = true;
 	//pState = owner;
 };
 
@@ -278,3 +317,139 @@ void CUISlider::SetPosition( sf::Vector2f pos )
 	recBounds.top = pos.y;
 	recBounds.left = pos.x;
 };
+
+//##################################################
+// class: CUITextfield
+// desc: Text input field
+//##################################################
+
+CUITextfield::CUITextfield( sf::Font &txtFont, std::string defaultString, float size, unsigned int txtSize )
+{
+	//Establish defaut values:
+	bHasContext = false;
+	iCursorPos = 0;
+
+	strText = defaultString;
+
+	//Generate all nessasary sf elements.
+	txtText = sf::Text( strText, txtFont, txtSize );
+	txtText.setFillColor( sf::Color( 0, 0, 0 ) );
+
+	//Create BG
+	shpBG = sf::RectangleShape( sf::Vector2f( size, txtText.getGlobalBounds().height * 2.0f ) );
+	shpBG.setFillColor( sf::Color( 200, 200, 200 ) );
+	shpBG.setOutlineColor( sf::Color( 50, 50, 50 ) );
+	shpBG.setOutlineThickness( -2 );
+
+	txtText.setPosition( sf::Vector2f( 2, 0 ) );
+
+	shpCursor = sf::RectangleShape( sf::Vector2f( 1, txtText.getGlobalBounds().height * 2.0f ) );
+	shpCursor.setFillColor( sf::Color( 0, 0, 0 ) );
+
+	recBounds = shpBG.getGlobalBounds();
+}
+
+void CUITextfield::SetPosition( sf::Vector2f pos )
+{
+	shpBG.setPosition( shpBG.getPosition() + ( pos - vecPosition ) );
+	txtText.setPosition( txtText.getPosition() + ( pos - vecPosition ) );
+
+	vecPosition = pos;
+
+	//Update bounds position:
+	recBounds.top = pos.y;
+	recBounds.left = pos.x;
+}
+
+//Handle SF events.
+void CUITextfield::HandleEvent( sf::Event e )
+{
+	if( e.type == sf::Event::MouseButtonPressed )
+	{
+		if( e.mouseButton.button == sf::Mouse::Button::Left )
+		{
+			//Gain or loose context.
+			if( shpBG.getGlobalBounds().contains( sf::Vector2f( e.mouseButton.x, e.mouseButton.y ) ) )
+			{
+				bHasContext = true;
+
+				//Figure out cursor position from mouse position:
+				float closest = 100.0f;
+
+				for( int i = 0; i <= strText.getSize(); ++i )
+				{
+					float dx = e.mouseButton.x - (txtText.findCharacterPos(i).x);
+					if( abs(dx) < abs(closest) )
+					{
+						closest = dx;
+						iCursorPos = i;
+					}
+				}
+			}
+			else
+				bHasContext = false;
+		}
+	}
+
+	if( bHasContext )
+	{
+		if( e.type == sf::Event::KeyPressed )
+		{
+			if( e.key.code == sf::Keyboard::BackSpace )
+			{
+				strText.erase( iCursorPos - 1, 1 );
+				iCursorPos--;
+
+				txtText.setString( strText );
+			}
+			else if( e.key.code == sf::Keyboard::Delete )
+			{
+				strText.erase( iCursorPos, 1 );
+				txtText.setString( strText );
+			}
+			else if( e.key.code == sf::Keyboard::Left )
+			{
+				if( iCursorPos > 0 )
+					iCursorPos--;
+			}
+			else if( e.key.code == sf::Keyboard::Right )
+			{
+				if( iCursorPos < strText.getSize() )
+					iCursorPos++;
+			}
+		}
+		else if( e.type == sf::Event::TextEntered )
+		{
+			if( !std::iscntrl( e.text.unicode ) )
+			{
+				strText.insert( iCursorPos, e.text.unicode );
+				iCursorPos++;
+
+				txtText.setString( strText );
+			}
+		}
+	}
+}
+
+//Draw elements
+void CUITextfield::Draw( sf::RenderWindow *window )
+{
+	if( !bActive )
+		return;
+
+	window->draw( shpBG );
+	window->draw( txtText );
+
+	if( bHasContext )
+	{
+		shpCursor.setPosition( txtText.findCharacterPos( iCursorPos ) );
+		window->draw( shpCursor );
+	}
+};
+
+
+//##################################################
+// class: 
+// desc: 
+//##################################################
+

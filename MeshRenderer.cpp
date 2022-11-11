@@ -415,7 +415,6 @@ void MeshObject::Draw( Camera cam )
 	GLuint MatrixID = glGetUniformLocation( shaderID, "MVP" );
 	
 	// Send our transformation to the currently bound shader, in the "MVP" uniform
-	// This is done in the main loop since each model will have a different MVP matrix (At least for the M part)
 	glUniformMatrix4fv( MatrixID, 1, GL_FALSE, &mvp[0][0] );
 
 	// Set our "myTextureSampler" sampler to use Texture Unit 0
@@ -452,6 +451,7 @@ void MeshObject::Draw( Camera cam )
 		(void*)0                          // array buffer offset
 	);
 
+	//Todo: Send bone wieghts and transforms.
 
 	glDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, 0);
 

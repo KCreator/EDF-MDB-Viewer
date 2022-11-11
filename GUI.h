@@ -22,13 +22,15 @@ class CUITitledContainer : public CBaseUIElement
 {
 public:
 	CUITitledContainer(){};
-	CUITitledContainer( sf::Font &txtFont, std::string title, float sizeX, float sizeY );
+	CUITitledContainer( sf::Font &txtFont, std::string title, float sizeX, float sizeY, bool horizontal = false );
 
 	void AddElement( CBaseUIElement *element );
 
 	void HandleEvent( sf::Event e );
 
 	void Draw( sf::RenderWindow *window );
+
+	void SetPosition( sf::Vector2f pos );
 
 protected:
 	sf::RectangleShape containerShape;
@@ -37,6 +39,8 @@ protected:
 
 	float xSize;
 	float ySize;
+
+	bool bHorizontalAligned;
 
 	std::vector< CBaseUIElement * > containedElements;
 };
@@ -63,6 +67,7 @@ protected:
 	std::function< void() > callback;
 
 	bool bIsMouseOver;
+	bool bHasCallback;
 };
 
 //Simple slider that controls a float value
@@ -90,4 +95,89 @@ protected:
 	//sf drawables:
 	sf::RectangleShape shpSlider;
 	sf::RectangleShape shpSliderBG;
+};
+
+//Text field UI element.
+class CUITextfield : public CBaseUIElement
+{
+public:
+	CUITextfield(){};
+	CUITextfield( sf::Font &txtFont, std::string defaultString, float size, unsigned int txtSize = 20U );
+
+	void SetPosition( sf::Vector2f pos );
+
+	//Handle SF events.
+	void HandleEvent( sf::Event e );
+
+	//Draw elements
+	void Draw( sf::RenderWindow *window );
+
+protected:
+	//Control variables
+	bool bHasContext;
+	int iCursorPos;
+	sf::String strText;
+
+	//Rendered sf elements
+	sf::Text txtText;
+	sf::RectangleShape shpBG;
+	sf::RectangleShape shpCursor;
+};
+
+//Simple labeled value implementation
+class CUILabelledValue : public CBaseUIElement
+{
+public:
+	CUILabelledValue(){};
+	CUILabelledValue( sf::Font &txtFont, std::string name, unsigned int fontSize = 20U )
+	{
+		txtLabelText = sf::Text( name, txtFont, fontSize );
+		txtLabelText.setFillColor( sf::Color( 0, 255, 0 ) );
+
+		labelString = name;
+
+		recBounds = txtLabelText.getGlobalBounds();
+	};
+
+	void SetTrackedValue( float *value )
+	{
+		trackedValue = value;
+
+		oldValue = *trackedValue;
+		txtLabelText.setString( labelString + std::to_string( *value ) );
+	};
+
+	void Draw( sf::RenderWindow *window )
+	{
+		if( !bActive )
+			return;
+
+		//Check if tracked value has changed.
+		if( trackedValue != NULL )
+		{
+			if( *trackedValue != oldValue )
+			{
+				txtLabelText.setString( labelString + std::to_string( *trackedValue ) );
+				oldValue = *trackedValue;
+			}
+		}
+
+		window->draw( txtLabelText );
+	};
+
+	void SetPosition( sf::Vector2f pos )
+	{
+		txtLabelText.setPosition( pos );
+		vecPosition = pos;
+
+		recBounds = txtLabelText.getGlobalBounds();
+		recBounds.height *= 2;
+	};
+
+protected:
+	float oldValue;
+	float *trackedValue;
+
+	std::string labelString;
+	sf::Text txtLabelText;
 };

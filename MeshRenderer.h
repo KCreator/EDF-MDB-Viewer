@@ -35,6 +35,13 @@ class ShaderList
 	{
 		ShaderList::Get()->shaders[name] = id;
 	};
+	static bool HasShader( std::string name )
+	{
+		if( ShaderList::Get()->shaders.count( name ) > 0 )
+			return true;
+		else
+			return false;
+	};
 	static GLuint LoadShader( std::string name, std::string vertexFileName, std::string fragmentFileName )
 	{
 		if( ShaderList::Get()->shaders.count( name ) > 0 )
@@ -92,6 +99,36 @@ public:
     GLuint shaderID;
 
     //Positioning:
+    glm::vec3 position;
+    glm::vec3 angles;
+    glm::vec3 scale;
+};
+
+//Clone of 'MeshRenderer' optimised for MDB data.
+//TODO: Implement this.
+
+class CMDBRenderer
+{
+public:
+	CMDBRenderer( );
+	~CMDBRenderer( );
+
+    void Draw( Camera cam );
+
+	GLuint VAO;
+    GLuint VBO, EBO;
+
+    GLuint TextureID, Texture;
+    GLuint UVBuffer;
+
+    GLuint boneBuffer;
+    GLuint boneWieghtBuffer;
+
+
+	GLuint vertexbuffer;
+    GLuint shaderID;
+
+	//Positioning:
     glm::vec3 position;
     glm::vec3 angles;
     glm::vec3 scale;

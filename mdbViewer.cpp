@@ -8,9 +8,20 @@
 #include <locale>
 
 //OPENGL INCLUDE
-#include <SFML/OpenGL.hpp>
 #include <SFML/Window.hpp>
+
+//Probably doesnt work.
+#ifdef WINDOWS
+#include <gl/GLEW.h>
+#include <SFML/OpenGL.hpp>
+
+//#include <glad/glad.h>
+//#include <GLFW/glfw3.h>
+#else
+#include <SFML/OpenGL.hpp>
 #include <GLES3/gl3.h>
+#endif
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <sstream>
 
@@ -23,7 +34,9 @@
 #include <SFML/Graphics.hpp>
 
 #include "RAB.h"
+
 #include <filesystem>
+
 #include "Util.h"
 
 #include "ToolState.h"
@@ -86,7 +99,18 @@ class CStateModelRenderer : public BaseToolState
 		isDragging = false;
 		bUseWireframe = false;
 		fov = 45.0f;
-		cameraPosition = glm::vec3( 2, 0, 0 );
+
+		cameraRotationX = 90;
+		cameraRotationY = 0;
+		cameraDistance = 2;
+
+		cameraPosition = glm::vec3( 0, 0, 0 );
+
+		float cameraRadiansX = cameraRotationX * 3.14159f / 180.f;
+		float cameraRadiansY = cameraRotationY * 3.14159f / 180.f;
+		cameraPosition.x = sin( cameraRadiansX ) * sin( cameraRadiansY ) * cameraDistance;
+		cameraPosition.y = cos( cameraRadiansX ) * cameraDistance;
+		cameraPosition.z = sin( cameraRadiansX ) * cos( cameraRadiansY ) * cameraDistance;
 	};
 
 	void ProccessEvent( sf::Event event )
@@ -141,11 +165,44 @@ class CStateModelRenderer : public BaseToolState
 		else if( event.type == sf::Event::MouseMoved && isDragging )
 		{
 			sf::Vector2i mousePos = sf::Mouse::getPosition( *window );
-			for( int i = 0; i < meshs.size(); ++i )
-				meshs[i]->angles.y -= (float)(mouseOldPos.x - mousePos.x) / 10.0f;
+
+			//for( int i = 0; i < meshs.size(); ++i )
+			//	meshs[i]->angles.y -= (float)(mouseOldPos.x - mousePos.x) / 10.0f;
+
+			sf::Vector2i mouseDelta = mousePos - mouseOldPos;
+
+			cameraRotationY -= mouseDelta.x * 0.1f;
+			cameraRotationX -= mouseDelta.y * 0.1f;
+
+			if( cameraRotationY > 360 )
+				cameraRotationY -= 360;
+
+			if( cameraRotationX > 360 )
+				cameraRotationX -= 360;
+
+			float cameraRadiansX = cameraRotationX * 3.14159f / 180.f;
+			float cameraRadiansY = cameraRotationY * 3.14159f / 180.f;
+			cameraPosition.x = sin( cameraRadiansX ) * sin( cameraRadiansY ) * cameraDistance;
+			cameraPosition.y = cos( cameraRadiansX ) * cameraDistance;
+			cameraPosition.z = sin( cameraRadiansX ) * cos( cameraRadiansY ) * cameraDistance;
 
 			mouseOldPos = mousePos;
 		}
+		else if( event.type == sf::Event::MouseWheelMoved )
+		{
+			cameraDistance -= event.mouseWheel.delta * 0.1f;
+			if( cameraDistance < 0.1f )
+			{
+				cameraDistance = 0.1f;
+			}
+
+			float cameraRadiansX = cameraRotationX * 3.14159f / 180.f;
+			float cameraRadiansY = cameraRotationY * 3.14159f / 180.f;
+			cameraPosition.x = sin( cameraRadiansX ) * sin( cameraRadiansY ) * cameraDistance;
+			cameraPosition.y = cos( cameraRadiansX ) * cameraDistance;
+			cameraPosition.z = sin( cameraRadiansX ) * cos( cameraRadiansY ) * cameraDistance;
+		}
+
 	}
 
 	void Draw()
@@ -204,8 +261,10 @@ class CStateModelRenderer : public BaseToolState
 	{
 		//Proccess:
 		std::filesystem::path fsPath = ipath;
+		std::string extension = fsPath.extension().string();
+		std::transform( extension.begin(), extension.end(), extension.begin(), ::tolower );
 
-		if( fsPath.extension() == ".mdb" ) //Load directly from MDB file
+		if( extension == ".mdb" ) //Load directly from MDB file
 		{
 			//Load mdb
 			//TODO: Load this more dynamically, through some kind of user input.
@@ -226,7 +285,7 @@ class CStateModelRenderer : public BaseToolState
 				meshs.push_back( std::make_unique<MeshObject>( reader.GetMeshPositionVertices(0, i), reader.GetMeshIndices(0, i), reader.uvs, programID, LoadDDS("texture1.dds") ) );
 			}
 		}
-		else if( fsPath.extension() == ".RAB" )
+		else if( extension == ".rab" || extension == ".mrab" )
 		{
 			//Load RAB archive
 			RABReader mdlArc( ipath.c_str() );
@@ -255,14 +314,21 @@ class CStateModelRenderer : public BaseToolState
 			//Fully construct the object:
 			for( int i = 0; i < model.model.objects[0].meshcount; ++i )
 			{
+				//Test folder names:
+				std::wstring folder = L"HD-TEXTURE";
+				if( !mdlArc.HasFolder( folder ) )
+				{
+					folder = L"TEXTURE";
+				}
+
 				std::vector< char > textureBytes;
-				textureBytes = mdlArc.ReadFile( L"HD-TEXTURE", model.GetColourTextureFilename( 0, i ) );
+				textureBytes = mdlArc.ReadFile( folder, model.GetColourTextureFilename( 0, i ) );
 
 				meshs.push_back( std::make_unique<MeshObject>( model.GetMeshPositionVertices(0, i), model.GetMeshIndices(0, i), model.GetMeshUVs( 0, i ), programID, LoadDDS_FromBuffer(textureBytes) ) );
 			}
 
 			//Camera angle for looking at humanoid bones.
-			cameraPosition = glm::vec3( 0, 3, 2 );
+			//cameraPosition = glm::vec3( 0, 3, 2 );
 
 			//Attempt to generate bones.
 			std::vector< glm::mat4 > boneWorldTransforms;
@@ -321,6 +387,9 @@ class CStateModelRenderer : public BaseToolState
 
 	//TODO: This shouldnt be here, it should be in the camera class.
 	glm::vec3 cameraPosition;
+	float cameraRotationX;
+	float cameraRotationY;
+	float cameraDistance;
 	float fov;
 
 	//Control variables
@@ -367,8 +436,8 @@ class CStateSceneRenderer : public BaseToolState
 
 		isMouseCamControl = false;
 
-		sf::Mouse::setPosition( sf::Vector2i(window->getSize().x/2, window->getSize().y/2) , *window );
-		mouseOldPos = sf::Mouse::getPosition( *window );
+		//sf::Mouse::setPosition( sf::Vector2i(window->getSize().x/2, window->getSize().y/2) , *window );
+		//mouseOldPos = sf::Mouse::getPosition( *window );
 	};
 
 	void ProccessEvent( sf::Event event )
@@ -507,6 +576,7 @@ class CStateSceneRenderer : public BaseToolState
 		RABReader mdlArc( ( path + ".RAB" ).c_str() );
 
 		//Compare map object strings, replace with "true" object when I can.
+		/*
 		if( map.modelNames.size() == map.modelNames2.size() )
 		{
 			for( int i = 0; i < map.modelNames.size(); ++i )
@@ -521,6 +591,12 @@ class CStateSceneRenderer : public BaseToolState
 				}
 			}
 		}
+		*/
+
+		for (int i = 0; i < map.modelNames.size(); ++i)
+		{
+			map.modelNames[i] = map.modelNames2[i] + L".mdb";
+		}
 
 		//Lets be more effecient about this.
 		//Determine "Unique" models
@@ -534,7 +610,12 @@ class CStateSceneRenderer : public BaseToolState
 			if( mdbs.count( map.modelNames[i] ) == 0 )
 			{
 				std::wstring mdbName = map.modelNames[i];
-				mdbs[ mdbName ] = MDBReader( mdlArc.ReadFile( L"MODEL", mdbName ) );
+				std::vector< char > file = mdlArc.ReadFile(L"MODEL", mdbName);
+				if (file.size() == 0)
+					continue;
+
+				mdbs[mdbName] = MDBReader(file);
+				file.clear();
 
 				if( mdbs[ mdbName ].model.objectscount == 0 ) //Bizzare edge case where a null model exists.
 					continue;
@@ -561,7 +642,12 @@ class CStateSceneRenderer : public BaseToolState
 				if( mdbs.count( map.subModelNames[i] ) == 0 )
 				{
 					std::wstring mdbName = map.subModelNames[i];
-					mdbs[ mdbName ] = MDBReader( mdlArc.ReadFile( L"MODEL", mdbName ) );
+					std::vector< char > file = mdlArc.ReadFile(L"MODEL", mdbName);
+					if (file.size() == 0)
+						continue;
+
+					mdbs[ mdbName ] = MDBReader( file );
+					file.clear();
 
 					if( mdbs[ mdbName ].model.objectscount == 0 ) //Bizzare edge case where a null model exists.
 						continue;
@@ -749,7 +835,10 @@ protected:
 
 		for( const auto & entry : std::filesystem::directory_iterator( path ) )
 		{
-			if( entry.path().extension() == ".mdb" || entry.path().extension() == ".RAB" || entry.is_directory() )
+			std::string extension = entry.path().extension().string();
+			std::transform( extension.begin(), extension.end(), extension.begin(), ::tolower );
+
+			if( extension == ".mdb" || extension == ".rab" || extension == ".mrab" || entry.is_directory() )
 			{
 				sf::Text text = sf::Text( entry.path().c_str(), font, 20u );
 				text.setFillColor( sf::Color( 0, 255, 0 ) );
@@ -767,10 +856,245 @@ protected:
 
 #include "GUI.h"
 
+//File browser UI element.
+class CUIFileBrowser : public CBaseUIElement
+{
+public:
+	CUIFileBrowser(){};
+	CUIFileBrowser( sf::Font &txtFont, std::string startDirectory, std::string filters )
+	{
+		path = std::filesystem::canonical( std::filesystem::absolute( startDirectory ) ).generic_string();
+		font = txtFont;
+
+		//Generate a file browser UI.
+
+		float xSize = 480;
+		float ySize = 480;
+
+		//Background
+		background = sf::RectangleShape( sf::Vector2f( xSize, ySize ) );
+		background.setFillColor( sf::Color( 128, 128, 128 ) );
+
+		directoryBackground = sf::RectangleShape( sf::Vector2f( xSize, 32 ) );
+		directoryBackground.setOutlineThickness( 2 );
+		directoryBackground.setOutlineColor( sf::Color( 64, 64, 64 ) );
+		directoryBackground.setFillColor( sf::Color( 192, 192, 192 ) );
+
+		shpDirectorySelected = sf::RectangleShape( sf::Vector2f( 32, 32 ) );
+		shpDirectorySelected.setFillColor( sf::Color( 192, 192, 255 ) );
+
+		pSlider = new CUISliderVertical( &flScrollProgress, 0, 1, ySize - 64 );
+		pSlider->SetPosition( sf::Vector2f( xSize - 32, 32 ) );
+		pSlider->SetActive( true );
+
+		GenerateDirectory();
+		GenerateFileList();
+
+		//for( const auto & entry : std::filesystem::directory_iterator( path ) )
+		//{
+		//}
+
+		//directoryList->AddElement();
+	}
+
+	~CUIFileBrowser()
+	{
+		delete pSlider;
+	}
+
+	void SetPosition( sf::Vector2f pos )
+	{
+		vecPosition = pos;
+	};
+
+	//Handle SF events.
+	void HandleEvent( sf::Event e )
+	{
+		//Store new mouse position.
+		if( e.type == e.MouseMoved )
+			mousePos = sf::Vector2f( e.mouseMove.x, e.mouseMove.y );
+
+		if( e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Up )
+		{
+			//TODO: Use views. Will handle scrolling much better.
+			for( auto& btn : texts )
+			{
+				btn.setPosition( btn.getPosition() + sf::Vector2f( 0, 1 ) );
+			}
+		}
+
+		//Left click event, handle button inputs.
+		if( e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Button::Left )
+		{
+			//Iterate through every directory sub-path
+			for( int i = 0; i < directoryList.size(); ++i )
+			{
+				if( directoryList[i].getGlobalBounds().contains(sf::Vector2f(e.mouseButton.x, e.mouseButton.y) ) )
+				{
+					//Construct new path:
+					std::string pathNew = "";
+					for( int j = 0; j <= i; ++j )
+					{
+						pathNew += directoryList[ j ].getString();
+					}
+
+					//Set new path.
+					path = pathNew;
+
+					//Regenerate directory string.
+					GenerateDirectory();
+					
+					//Repupulate file list
+					GenerateFileList();
+
+					break; //Exit loop.
+				}
+			}
+		}
+
+		//directoryList->HandleEvent( e );
+		pSlider->HandleEvent( e );
+	};
+
+	//Draw elements
+	void Draw( sf::RenderTarget *window )
+	{
+		//Draw background
+		window->draw( background );
+		window->draw( directoryBackground );
+
+		sf::RenderTexture renderTexture;
+
+		float xSize = 480;
+		float ySize = 480 - 64;
+		renderTexture.create( xSize, ySize );
+
+		//Draw all other elements as part of a Render Texture (?)
+		for( auto& btn : texts )
+		{
+			renderTexture.draw( btn );
+		}
+
+		renderTexture.display();
+
+		sf::Sprite sprite( renderTexture.getTexture() );
+		sprite.setPosition( vecPosition + sf::Vector2f( 0, 64 ) );
+		window->draw( sprite );
+
+		for( auto &dir : directoryList )
+		{
+			//Draw a little blue box over the folder in the directory box if applicable.
+			if( dir.getGlobalBounds().contains( sf::Vector2f( mousePos ) ) )
+			{
+				shpDirectorySelected.setPosition( sf::Vector2f( dir.getGlobalBounds().left, dir.getGlobalBounds().top ) );
+				shpDirectorySelected.setSize( sf::Vector2f( dir.getGlobalBounds().width, dir.getGlobalBounds().height ) );
+				window->draw( shpDirectorySelected );
+			}
+			window->draw( dir );
+		}
+
+		if( pSlider )
+			pSlider->Draw( window );
+
+		//directoryList->Draw( window );
+	};
+
+	void GenerateFileList()
+	{
+		if( texts.size() > 0 )
+			texts.clear();
+
+		//Files in directory
+		for( const auto& entry : std::filesystem::directory_iterator( path ) )
+		{
+			std::string extension = entry.path().extension().string();
+			std::transform( extension.begin(), extension.end(), extension.begin(), ::tolower );
+
+			if( extension == ".mdb" || extension == ".rab" || extension == ".mrab" || entry.is_directory() )
+			{
+				sf::Text text = sf::Text( entry.path().filename().c_str(), font, 20u );
+				text.setFillColor( sf::Color( 0, 255, 0 ) );
+
+				if( texts.size() > 0 )
+					text.setPosition( sf::Vector2f( 5, texts.back().getGlobalBounds().top + texts.back().getGlobalBounds().height ) );
+				else
+					text.setPosition( sf::Vector2f( 5, 0 ) );
+
+
+				texts.push_back( text );
+			}
+		}
+	}
+
+	void GenerateDirectory()
+	{
+		if( directoryList.size() > 0 )
+			directoryList.clear();
+
+		//Directory List
+		float xOfs = 0;
+
+		//Split path string.
+		std::string splitstrn = path;
+		size_t pos = splitstrn.find( "/" );
+		while( pos != std::string::npos )
+		{
+			std::string folder = splitstrn.substr( 0, pos );
+			splitstrn = splitstrn.substr( pos + 1, splitstrn.size() - pos );
+
+			pos = splitstrn.find( "/" );
+
+			if( folder.size() == 0 )
+				continue;
+
+			directoryList.push_back( sf::Text( folder + "/", font, 15 ) );
+			directoryList.back().setPosition( xOfs, 0 );
+			directoryList.back().setFillColor( sf::Color::Black );
+
+			xOfs += directoryList.back().getGlobalBounds().width;
+		}
+
+		directoryList.push_back( sf::Text( splitstrn, font, 15 ) );
+		directoryList.back().setPosition( xOfs, 0 );
+		directoryList.back().setFillColor( sf::Color::Black );
+	}
+
+protected:
+	std::vector< sf::Text > directoryList;
+
+	//std::vector< sf::Text > files;
+
+	std::vector< sf::Text > texts; //Needs to be renamed.
+
+	//std::vector< CUIButton* > directoryButtons;
+	//std::vector< CUIButton * > fileButtons;
+
+	//I don't like this, but we need to use something like this to avoid having a reference to the main window.
+	sf::Vector2f mousePos;
+
+	std::string path;
+
+	sf::Font font;
+
+	sf::RectangleShape background;
+	sf::RectangleShape directoryBackground;
+	sf::RectangleShape shpDirectorySelected;
+
+	float flScrollProgress;
+
+	CUISliderVertical* pSlider;
+};
+
 //Temp UI test state
 class CStateUITest : public BaseToolState
 {
 public:
+	~CStateUITest()
+	{
+		if( fb )
+			delete fb;
+	}
+
 	void Init( sf::RenderWindow *iwindow )
 	{
 		window = iwindow;
@@ -837,13 +1161,23 @@ public:
 		fileUI = CUITitledContainer( font, "FILE", 158, 300, false );
 		fileUI.SetActive( false );
 
-		CUIButton *button1 = new CUIButton( font, "Load MDB" );
+		CUIButton *button1 = new CUIButton( font, "Load Model" );
 		button1->SetActive( true );
-		button1->SetCallback( [&]{Test2();} );
+		button1->SetCallback( [&]{Test();} );
 
 		fileUI.AddElement( button1 );
 
+		CUIButton* button2 = new CUIButton(font, "Load MAC");
+		button2->SetActive(true);
+		button2->SetCallback([&]{ Test2(); });
+
+		fileUI.AddElement(button2);
+
 		fileUI.SetPosition( sf::Vector2f( 0, 64 ) );
+
+		//File Browser is incomplete.
+		//fb = new CUIFileBrowser( font, "./", ".rab" );
+		//fb->SetActive( true );
 	}
 
 	void PressedFile()
@@ -871,6 +1205,7 @@ public:
 	{
 		ui1.HandleEvent( event );
 		fileUI.HandleEvent( event );
+		//fb->HandleEvent( event );
 	}
 
 	void Draw()
@@ -880,6 +1215,7 @@ public:
 
 		ui1.Draw( window );
 		fileUI.Draw( window );
+		//fb->Draw( window );
 		
 		window->popGLStates();
 		window->display();
@@ -888,18 +1224,114 @@ public:
 	sf::Font font;
 	CUITitledContainer ui1;
 	CUITitledContainer fileUI;
+	CUIFileBrowser *fb;
 	float testvalue;
 };
+
+//CAS.
+class CAS
+{
+public:
+	CAS( const char *path )
+	{
+		//Create input stream from path
+		std::ifstream file( path, std::ios::binary | std::ios::ate );
+		std::streamsize size = file.tellg( );
+		file.seekg( 0, std::ios::beg );
+
+		std::vector<char> buffer( size );
+		if( file.read( buffer.data( ), size ) )
+		{
+			int pos = 0x0;
+
+			//Read.
+			//pos = 0xc;
+			int TControlCount = ReadInt( &buffer, 0xc );
+			int TControlStart = ReadInt( &buffer, 0x10 );
+
+			int VControlCount = ReadInt( &buffer, 0x14 );
+			int VControlStart = ReadInt( &buffer, 0x18 );
+
+			int AnimGroupCount = ReadInt( &buffer, 0x1c );
+			int AnimGroupStart = ReadInt( &buffer, 0x20 );
+
+			//Read 'Animation Groups'
+			pos = AnimGroupStart;
+			for( int i = 0; i < AnimGroupCount; ++i )
+			{
+				int base = pos;
+
+				int strOfs = ReadInt( &buffer, pos );
+				std::wstring groupName = ReadUnicode( &buffer, pos + strOfs, false );
+				//std::wcout << strn + L"\n";
+
+				pos += 0x4;
+
+				int number = ReadInt( &buffer, pos );
+				pos += 0x4;
+
+				int ofs = base + ReadInt( &buffer, pos );
+				pos += 0x4;
+
+				for( int j = 0; j < number; ++j )
+				{
+					strOfs = ReadInt( &buffer, ofs );
+					std::wstring name = ReadUnicode( &buffer, ofs + strOfs, false );
+
+					std::wcout << groupName + L"/" + name + L"\n";
+
+					ofs += 0x24;
+				}
+			}
+		}
+	};
+};
+
+#ifdef WINDOWS
+
+#include <locale.h>
+
+#ifndef MS_STDLIB_BUGS
+#  if ( _MSC_VER || __MINGW32__ || __MSVCRT__ )
+#    define MS_STDLIB_BUGS 1
+#  else
+#    define MS_STDLIB_BUGS 0
+#  endif
+#endif
+
+#if MS_STDLIB_BUGS
+#  include <io.h>
+#  include <fcntl.h>
+#endif
+
+void init_locale(void)
+{
+#if MS_STDLIB_BUGS
+	char cp_utf16le[] = ".1200";
+	setlocale(LC_ALL, cp_utf16le);
+	_setmode(_fileno(stdout), _O_WTEXT);
+#else
+	// The correct locale name may vary by OS, e.g., "en_US.utf8".
+	constexpr char locale_name[] = "";
+	setlocale(LC_ALL, locale_name);
+	std::locale::global(std::locale(locale_name));
+	std::wcin.imbue(std::locale())
+		std::wcout.imbue(std::locale());
+#endif
+}
+
+#endif
 
 //##############################################################
 //Program entrypoint.
 //##############################################################
-int main()
+int wmain( int argc, wchar_t* argv[] )
 {
     //std::cout << "Test:\n";
 
 	//CRMPAReader reader( "EDFData/MISSION.RMPA" );
 
+	//CAS cas = CAS( "EDFData/ARMYSOLDIER.CAS" );
 	//return 0;
 
     //SFML Setup.
@@ -915,6 +1347,17 @@ int main()
 	int resolutionY = 600;
 
     sf::RenderWindow window( sf::VideoMode(resolutionX, resolutionY), "MDB Viewer", sf::Style::Default, settings );
+
+#ifdef WINDOWS
+	init_locale(); //Init locale
+	glewInit(); // Init GLEW.
+	GLenum err = glewInit();
+	if (GLEW_OK != err)
+	{
+		/* Problem: glewInit failed, something is seriously wrong. */
+		fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
+	}
+#endif
 
 	//Init shader list:
 	ShaderList::Initialize();
@@ -945,8 +1388,27 @@ int main()
 	//Set default state
 	states->SetState( "uitest" );
 
+	//Attempt to load model based on drag+drop if possible
+	if( argc > 1 )
+	{
+		std::filesystem::path fsPath = argv[ 1 ];
+
+		std::wcout << L"LOADING MODEL: " + fsPath.wstring() + L"\n";
+
+		std::string extension = fsPath.extension().string();
+		std::transform( extension.begin(), extension.end(), extension.begin(), ::tolower );
+
+		if( extension == ".rab" || extension == ".mrab" )
+		{
+			mdlRenderer->LoadMDB( fsPath.string() );
+			states->SetState( "viewer" );
+		}
+	}
+
+	sf::Clock frameTime;
+
     //MAIN LOOP
-    while (window.isOpen())
+    while( window.isOpen() )
     {
         sf::Event event;
         while( window.pollEvent(event) )
@@ -954,8 +1416,8 @@ int main()
 			if( event.type == sf::Event::Resized )
 			{
 				//Resize SF viewport
-				sf::FloatRect visibleArea(0, 0, event.size.width, event.size.height);
-    			window.setView( sf::View(visibleArea) );
+				sf::FloatRect visibleArea( 0, 0, event.size.width, event.size.height );
+    			window.setView( sf::View( visibleArea ) );
 			}
             if( event.type == sf::Event::Closed )
                 window.close();
@@ -964,6 +1426,9 @@ int main()
         }
 
         states->Draw(); //Todo: Place common draw steps before and after state.
+
+		float dT = frameTime.restart().asSeconds();
+		//std::wcout << std::to_wstring( dT ) + L"\n";
     }
 
 	//Erase states, calling deconstructors.

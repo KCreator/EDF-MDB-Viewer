@@ -7,10 +7,12 @@
 //Supporting data structures.
 struct RMPASpawnpoint
 {
+	//Position
 	float x;
 	float y;
 	float z;
 
+	//Facing
 	float fx;
 	float fy;
 	float fz;
@@ -18,10 +20,17 @@ struct RMPASpawnpoint
 	std::wstring name;
 };
 
+struct RMPAShape
+{
+
+};
+
 class CRMPAReader
 {
 public:
 	CRMPAReader( const char *path );
+
+	//void ParseSpawnpoints( std::vector< char > &buffer );
 
 	//Temp:
 	std::vector< RMPASpawnpoint > spawnpoints;

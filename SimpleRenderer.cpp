@@ -1,16 +1,25 @@
 #include <vector>
 #include <map>
 
-//OPENGL INCLUDE
-#include <SFML/OpenGL.hpp>
+
 #include <SFML/Window.hpp>
+
+//OPENGL INCLUDE
+#ifndef WINDOWS
 #include <GLES3/gl3.h>
+#else
+#include <GL/glew.h>
+#endif
+
+#include <SFML/OpenGL.hpp>
+
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "MeshRenderer.h"
 #include "SimpleRenderer.h"
 
-CDebugLine::CDebugLine( glm::vec3 pointA, glm::vec3 pointB, glm::vec3 colour )
+//Not ideal.
+void GenerateLineShaders()
 {
 	//Hardcoded shaders. Ideally we would move all this junk somewhere else.
 	const char *vertexShaderSource = "#version 330 core\n"
@@ -41,7 +50,7 @@ CDebugLine::CDebugLine( glm::vec3 pointA, glm::vec3 pointB, glm::vec3 colour )
 	// check for shader compile errors
 
 	// link shaders
-	shaderProgram = glCreateProgram();
+	GLuint shaderProgram = glCreateProgram();
 	glAttachShader(shaderProgram, vertexShader);
 	glAttachShader(shaderProgram, fragmentShader);
 	glLinkProgram(shaderProgram);
@@ -50,10 +59,21 @@ CDebugLine::CDebugLine( glm::vec3 pointA, glm::vec3 pointB, glm::vec3 colour )
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
+	ShaderList::AddShader( "LineShader", shaderProgram );
+};
+
+CDebugLine::CDebugLine( glm::vec3 pointA, glm::vec3 pointB, glm::vec3 colour )
+{
+	if( !ShaderList::HasShader( "LineShader" ) )
+	{
+		GenerateLineShaders();
+	}
+	
+	shaderProgram = ShaderList::GetShader( "LineShader" );
+
 	vertices = {
 			pointA.x, pointA.y, pointA.z,
 			pointB.x, pointB.y, pointB.z,
-
 	};
 	
 	glGenVertexArrays(1, &VAO);
@@ -75,7 +95,7 @@ CDebugLine::~CDebugLine()
 {
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
-	glDeleteProgram(shaderProgram);
+	//glDeleteProgram(shaderProgram);
 }
 
 void CDebugLine::Draw( Camera cam )

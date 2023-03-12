@@ -61,9 +61,13 @@ struct MDBVertexData
 //Mesh information structure, Holds data related to an object's mesh
 struct MDBMeshInfo
 {
-    int skindata;
+    bool UNK0;
+    bool isSkinned;
+    char vertexBoneCount;
+    char alignmentByte;
+
     int material;
-    int UNK0;
+    int UNK1;
     std::vector<MDBVertexLayoutInfo> vertexinfo;
     short vertexsize;
     short layoutcount;

@@ -9,7 +9,7 @@
 
 //OPENGL INCLUDE
 #include <SFML/OpenGL.hpp>
-#include <GLES3/gl3.h>
+//#include <GLES3/gl3.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <sstream>
 
@@ -381,7 +381,10 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         MDBMeshInfo mesh;
 
         //Skin data TODO: Parse this properly.
-        mesh.skindata = ReadInt( &mdbBytes, pos );
+        mesh.UNK0 = mdbBytes[pos];
+        mesh.isSkinned = mdbBytes[pos + 1];
+        mesh.vertexBoneCount = mdbBytes[pos + 2];
+        mesh.alignmentByte = mdbBytes[pos + 3];
         pos += 0x4;
 
         //Material
@@ -389,7 +392,7 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
         pos += 0x4;
 
         //Unknown (Always zero?)
-        mesh.UNK0 = ReadInt( &mdbBytes, pos );
+        mesh.UNK1 = ReadInt( &mdbBytes, pos );
         pos += 0x4;
 
         //Offset to Vertex Layout Info
@@ -449,7 +452,24 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
 
                 if( info.type == 1 ) //Float4 (16 bytes)
                 {
-                    vertPos += 16;
+                    float x = ReadFloat( &mdbBytes, vertPos, true );
+                    vertPos += 0x4;
+
+                    float y = ReadFloat( &mdbBytes, vertPos, true );
+                    vertPos += 0x4;
+
+                    float z = ReadFloat( &mdbBytes, vertPos, true );
+                    vertPos += 0x4;
+
+                    float w = ReadFloat( &mdbBytes, vertPos, true );
+                    vertPos += 0x4;
+
+                    //Store to our vertexData map.
+                    std::string vertexName = mesh.vertexinfo[ vi ].name + std::to_string( mesh.vertexinfo[ vi ].channel );
+                    mesh.vertexdata[ vertexName ].push_back( x );
+                    mesh.vertexdata[ vertexName ].push_back( y );
+                    mesh.vertexdata[ vertexName ].push_back( z );
+                    mesh.vertexdata[ vertexName ].push_back( w );
                 }
                 else if( info.type == 4 ) //Float3 (12 bytes)
                 {
@@ -516,7 +536,14 @@ void MDBReader::ReadMeshInfo( MDBObject &obj, int position )
                 }
                 if( info.type == 21 ) //ubyte4 (4 bytes)
                 {
-                    vertPos += 4;
+                    std::string vertexName = mesh.vertexinfo[ vi ].name + std::to_string( mesh.vertexinfo[ vi ].channel );
+
+                    //Push 4 bytes to vertexdata
+                    for( int bt = 0; bt < 4; ++bt )
+                    {
+                        mesh.vertexdata[ vertexName ].push_back( mdbBytes[ vertPos ] );
+                        vertPos++;
+                    }
                 }
             }
 

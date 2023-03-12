@@ -1,3 +1,4 @@
+#include <functional>
 #pragma once
 
 //2D UI Elements to overlay on the rendered screen
@@ -6,7 +7,7 @@ class CBaseUIElement
 public:
 	void SetActive( bool active ) { bActive = active; };
 	virtual void HandleEvent( sf::Event e ){};
-	virtual void Draw( sf::RenderWindow *window ){};
+	virtual void Draw( sf::RenderTarget *window ){};
 	virtual void SetPosition( sf::Vector2f newPos ){};
 
 	sf::Vector2f GetPosition(){ return vecPosition; };
@@ -28,7 +29,7 @@ public:
 
 	void HandleEvent( sf::Event e );
 
-	void Draw( sf::RenderWindow *window );
+	void Draw( sf::RenderTarget *window );
 
 	void SetPosition( sf::Vector2f pos );
 
@@ -56,7 +57,7 @@ public:
 
 	void HandleEvent( sf::Event e );
 
-	void Draw( sf::RenderWindow *window );
+	void Draw( sf::RenderTarget *window );
 
 	void SetCallback(std::function< void( ) > icallback );
 
@@ -78,7 +79,7 @@ public:
 	CUISlider(){};
 	CUISlider( float *value, float low, float high, float size );
 
-	void Draw( sf::RenderWindow *window );
+	void Draw( sf::RenderTarget *window );
 
 	void HandleEvent( sf::Event e );
 
@@ -97,6 +98,32 @@ protected:
 	sf::RectangleShape shpSliderBG;
 };
 
+//Vertical slider, clone of the horizontal slider, useful for scrollbars.
+class CUISliderVertical : public CBaseUIElement
+{
+public:
+	CUISliderVertical() {};
+	CUISliderVertical( float* value, float low, float high, float size );
+
+	void Draw( sf::RenderTarget* window );
+
+	void HandleEvent( sf::Event e );
+
+	void SetPosition( sf::Vector2f pos );
+
+private:
+	float* controlledValue;
+	float minValue;
+	float maxValue;
+
+	bool isDragging;
+	float dragYOffs;
+
+	// sf drawables:
+	sf::RectangleShape shpSlider;
+	sf::RectangleShape shpSliderBG;
+};
+
 //Text field UI element.
 class CUITextfield : public CBaseUIElement
 {
@@ -110,7 +137,7 @@ public:
 	void HandleEvent( sf::Event e );
 
 	//Draw elements
-	void Draw( sf::RenderWindow *window );
+	void Draw( sf::RenderTarget *window );
 
 protected:
 	//Control variables
@@ -147,7 +174,7 @@ public:
 		txtLabelText.setString( labelString + std::to_string( *value ) );
 	};
 
-	void Draw( sf::RenderWindow *window )
+	void Draw( sf::RenderTarget *window )
 	{
 		if( !bActive )
 			return;

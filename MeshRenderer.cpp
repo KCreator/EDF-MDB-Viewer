@@ -7,9 +7,16 @@
 #include <sstream>
 
 //OPENGL INCLUDE
-#include <SFML/OpenGL.hpp>
 #include <SFML/Window.hpp>
+
+#ifndef WINDOWS
 #include <GLES3/gl3.h>
+#else
+#include <GL/glew.h>
+#endif
+
+#include <SFML/OpenGL.hpp>
+
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "MeshRenderer.h"
@@ -41,8 +48,8 @@ GLuint LoadShaders( const char * vertex_file_path, const char * fragment_file_pa
 	}
     else
     {
-		printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", vertex_file_path);
-		getchar();
+		//printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", vertex_file_path);
+		//getchar();
 		return 0;
 	}
 
@@ -61,7 +68,7 @@ GLuint LoadShaders( const char * vertex_file_path, const char * fragment_file_pa
 	int InfoLogLength;
 
 	// Compile Vertex Shader
-	printf("Compiling shader : %s\n", vertex_file_path);
+	//printf("Compiling shader : %s\n", vertex_file_path);
 	char const * VertexSourcePointer = VertexShaderCode.c_str();
 	glShaderSource(VertexShaderID, 1, &VertexSourcePointer , NULL);
 	glCompileShader(VertexShaderID);
@@ -73,11 +80,11 @@ GLuint LoadShaders( const char * vertex_file_path, const char * fragment_file_pa
     {
 		std::vector<char> VertexShaderErrorMessage(InfoLogLength+1);
 		glGetShaderInfoLog(VertexShaderID, InfoLogLength, NULL, &VertexShaderErrorMessage[0]);
-		printf("%s\n", &VertexShaderErrorMessage[0]);
+		//printf("%s\n", &VertexShaderErrorMessage[0]);
 	}
 
 	// Compile Fragment Shader
-	printf("Compiling shader : %s\n", fragment_file_path);
+	//printf("Compiling shader : %s\n", fragment_file_path);
 	char const * FragmentSourcePointer = FragmentShaderCode.c_str();
 	glShaderSource(FragmentShaderID, 1, &FragmentSourcePointer , NULL);
 	glCompileShader(FragmentShaderID);
@@ -89,11 +96,11 @@ GLuint LoadShaders( const char * vertex_file_path, const char * fragment_file_pa
     {
 		std::vector<char> FragmentShaderErrorMessage(InfoLogLength+1);
 		glGetShaderInfoLog(FragmentShaderID, InfoLogLength, NULL, &FragmentShaderErrorMessage[0]);
-		printf("%s\n", &FragmentShaderErrorMessage[0]);
+		//printf("%s\n", &FragmentShaderErrorMessage[0]);
 	}
 
 	// Link the program
-	printf("Linking program\n");
+	//printf("Linking program\n");
 	GLuint ProgramID = glCreateProgram();
 	glAttachShader(ProgramID, VertexShaderID);
 	glAttachShader(ProgramID, FragmentShaderID);
@@ -106,7 +113,7 @@ GLuint LoadShaders( const char * vertex_file_path, const char * fragment_file_pa
     {
 		std::vector<char> ProgramErrorMessage(InfoLogLength+1);
 		glGetProgramInfoLog(ProgramID, InfoLogLength, NULL, &ProgramErrorMessage[0]);
-		printf("%s\n", &ProgramErrorMessage[0]);
+		//printf("%s\n", &ProgramErrorMessage[0]);
 	}
 	
 	glDetachShader(ProgramID, VertexShaderID);
@@ -130,7 +137,7 @@ GLuint LoadDDS(const char * imagepath)
 	FILE *fp; 
  
 	/* try to open the file */ 
-	fp = fopen(imagepath, "rb"); 
+	fopen_s( &fp, imagepath, "rb"); 
 	if (fp == NULL)
     {
 		printf("%s could not be opened. Are you in the right directory ? Don't forget to read the FAQ !\n", imagepath); getchar(); 
@@ -221,7 +228,7 @@ GLuint LoadDDS_FromBuffer( std::vector< char > byteBuf )
 {
 	unsigned char header[124];
 
-    int pos;
+    int pos = 0;
    
 	/* verify the type of file */ 
 	char filecode[4];
@@ -244,27 +251,16 @@ GLuint LoadDDS_FromBuffer( std::vector< char > byteBuf )
         pos++;
     }
 
+	unsigned int flags = *(unsigned int*)&(header[4]);
 	unsigned int height      = *(unsigned int*)&(header[8 ]);
 	unsigned int width	     = *(unsigned int*)&(header[12]);
 	unsigned int linearSize	 = *(unsigned int*)&(header[16]);
 	unsigned int mipMapCount = *(unsigned int*)&(header[24]);
 	unsigned int fourCC      = *(unsigned int*)&(header[80]);
 
- 
+
 	unsigned char * buffer;
 	unsigned int bufsize;
-	/* how big is it going to be including all mipmaps? */ 
-	bufsize = mipMapCount > 1 ? linearSize * 2 : linearSize; 
-	buffer = (unsigned char*)malloc(bufsize * sizeof(unsigned char)); 
-
-    for( int i = 0; i < bufsize; ++i )
-    {
-		//if( i > byteBuf.size() )
-		//	break; //ERROR
-
-        buffer[i] = byteBuf[ pos ];
-        pos++;
-    }
 
 	unsigned int components  = (fourCC == FOURCC_DXT1) ? 3 : 4; 
 	unsigned int format;
@@ -280,8 +276,28 @@ GLuint LoadDDS_FromBuffer( std::vector< char > byteBuf )
 		format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT; 
 		break; 
 	default: 
-		free(buffer); 
 		return 0; 
+	}
+
+	unsigned int blockSize = (format == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT) ? 8 : 16;
+	unsigned int offset = 0;
+
+	/* how big is it going to be including all mipmaps? */
+
+	if (flags & 0x80000)
+		bufsize = mipMapCount > 1 ? linearSize * 2 : linearSize;
+	else
+		bufsize = (((width + 3) / 4 * 4) * ((height + 3) / 4 * 4)) / 4 * blockSize;;
+
+	buffer = (unsigned char*)malloc(bufsize * sizeof(unsigned char));
+
+	for (int i = 0; i < bufsize; ++i)
+	{
+		if (pos >= byteBuf.size())
+			break; //ERROR
+
+		buffer[i] = byteBuf[pos];
+		pos++;
 	}
 
 	// Create one OpenGL texture
@@ -292,8 +308,7 @@ GLuint LoadDDS_FromBuffer( std::vector< char > byteBuf )
 	glBindTexture(GL_TEXTURE_2D, textureID);
 	glPixelStorei(GL_UNPACK_ALIGNMENT,1);	
 	
-	unsigned int blockSize = (format == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT) ? 8 : 16; 
-	unsigned int offset = 0;
+
 
 	/* load the mipmaps */ 
 	for (unsigned int level = 0; level < mipMapCount && (width || height); ++level) 
@@ -465,3 +480,167 @@ void MeshObject::Draw( Camera cam )
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+//##############################################################
+//
+//##############################################################
+#include "RAB.h"
+#include "MDBParser.h"
+
+CMDBRenderer::CMDBRenderer(  )
+{
+	//TEMP: For now, hardcode this.
+	//Load data
+	RABReader mdlArc( "EDFData/ARMYSOLDIER.RAB" );
+	MDBReader model( mdlArc.ReadFile( L"MODEL", L"p501_ranger.mdb" ) );
+
+	//Figure out how to arrange the skeletal mesh.
+	//model.model.bones[0].matrix;
+
+	//Fill in data:
+	std::vector< glm::vec3 > vertices = model.GetMeshPositionVertices( 0, 0 );
+	std::vector< unsigned int > indices = model.GetMeshIndices( 0, 0 );
+    std::vector< glm::vec2 > uvs = model.GetMeshUVs( 0, 0 );
+
+	shaderID = ShaderList::LoadShader( "SimpleTexturedBones", "SimpleVertexShaderBones.txt", "SimpleTexturedFragShader.txt" );;
+
+	//Load Texture:
+	Texture = LoadDDS_FromBuffer( mdlArc.ReadFile( L"HD-TEXTURE", model.GetColourTextureFilename( 0, 0 ) ) );
+
+	// Get a handle for our "myTextureSampler" uniform
+	TextureID = glGetUniformLocation(shaderID, "myTextureSampler");
+
+	// create buffers/arrays
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glGenBuffers(1, &EBO);
+	glGenBuffers(1, &UVBuffer );
+
+	glBindVertexArray(VAO);
+	
+	// load data into vertex buffers
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices[0], GL_STATIC_DRAW); 
+
+	//Bind UVS
+	glBindBuffer(GL_ARRAY_BUFFER, UVBuffer);
+	glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(glm::vec2), &uvs[0], GL_STATIC_DRAW); 
+
+	//Bind bones
+	std::vector< unsigned int > bones;
+	for( int i = 0; i < model.model.bonescount; ++i )
+	{
+		bones.push_back( model.model.bones[i].boneIndex );
+	}
+	glBindBuffer(GL_ARRAY_BUFFER, boneBuffer);
+	glBufferData(GL_ARRAY_BUFFER, bones.size() * sizeof(unsigned int), &bones[0], GL_STATIC_DRAW); 
+
+	//Bind weights
+	//glBindBuffer(GL_ARRAY_BUFFER, boneWieghtBuffer);
+	//glBufferData(GL_ARRAY_BUFFER, model.model.objects[0].meshs[0].vertexdata["BLENDWEIGHTS0"].size() * sizeof(glm::vec2), &uvs[0], GL_STATIC_DRAW); 
+
+	//Buffer indices to EBO
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+
+
+	// set the vertex attribute pointers
+	// vertex Positions
+	glEnableVertexAttribArray(0);	
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+
+	glBindVertexArray(0);
+
+	//Fill in transforms with 0
+	position = glm::vec3( 0, 0, 0 );
+	angles = glm::vec3( 0, 0, 0 );
+};
+
+//Destructor. TODO: Clean up memory and OPENGL states here.
+CMDBRenderer::~CMDBRenderer()
+{
+	//Delete vertex arrays and buffers
+	glDeleteVertexArrays(1, &VAO);
+	glDeleteBuffers(1, &VBO);
+	glDeleteBuffers(1, &EBO);
+	glDeleteBuffers(1, &UVBuffer);
+};
+
+//Render the mesh using a specified camera.
+void CMDBRenderer::Draw( Camera cam )
+{
+	//Create model matrix from transforms.
+	glm::mat4 Model = glm::mat4( 1.0f );
+
+	Model = glm::translate( Model, position );
+
+	//TODO: This needs to be better.
+	Model = glm::rotate( Model, glm::radians( angles.x ), glm::vec3( 1, 0, 0 ) );
+	Model = glm::rotate( Model, glm::radians( angles.y ), glm::vec3( 0, 1, 0 ) );
+	Model = glm::rotate( Model, glm::radians( angles.z ), glm::vec3( 0, 0, 1 ) );
+
+	// Use our shader
+	glUseProgram(shaderID);
+
+	//Set up MVP:
+	glm::mat4 mvp = cam.Projection * cam.View * Model;
+
+	// Get a handle for our "MVP" uniform
+	// Only during the initialisation
+	GLuint MatrixID = glGetUniformLocation( shaderID, "MVP" );
+	
+	// Send our transformation to the currently bound shader, in the "MVP" uniform
+	glUniformMatrix4fv( MatrixID, 1, GL_FALSE, &mvp[0][0] );
+
+	// Set our "myTextureSampler" sampler to use Texture Unit 0
+	glUniform1i(TextureID, 0);
+
+	// Bind our texture in Texture Unit 0
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, Texture);
+
+	// draw mesh
+	glBindVertexArray(VAO);
+
+	// 1rst attribute buffer : vertices
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glVertexAttribPointer(
+		0,                  // attribute. No particular reason for 0, but must match the layout in the shader.
+		3,                  // size
+		GL_FLOAT,           // type
+		GL_FALSE,           // normalized?
+		0,                  // stride
+		(void*)0            // array buffer offset
+	);
+
+	// 2nd attribute buffer : UVs
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, UVBuffer);
+	glVertexAttribPointer(
+		1,                                // attribute. No particular reason for 1, but must match the layout in the shader.
+		2,                                // size : U+V => 2
+		GL_FLOAT,                         // type
+		GL_FALSE,                         // normalized?
+		0,                                // stride
+		(void*)0                          // array buffer offset
+	);
+
+	//Todo: Send bone wieghts and transforms.
+
+	//glDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, 0);
+
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+
+	glBindVertexArray(0);
+
+	// always good practice to set everything back to defaults once configured.
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}

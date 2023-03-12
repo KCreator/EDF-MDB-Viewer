@@ -72,7 +72,7 @@ void CUITitledContainer::HandleEvent( sf::Event e )
 }
 
 //Draws the container and its elements
-void CUITitledContainer::Draw( sf::RenderWindow *window )
+void CUITitledContainer::Draw( sf::RenderTarget *window )
 {
 	if( !bActive )
 		return;
@@ -179,7 +179,7 @@ void CUIButton::HandleEvent( sf::Event e )
 }
 
 //Draw the button
-void CUIButton::Draw( sf::RenderWindow *window )
+void CUIButton::Draw( sf::RenderTarget *window )
 {
 	if( !bActive )
 		return;
@@ -234,7 +234,7 @@ CUISlider::CUISlider( float *value, float low, float high, float size )
 	isDragging = false;
 }
 
-void CUISlider::Draw( sf::RenderWindow *window )
+void CUISlider::Draw( sf::RenderTarget *window )
 {
 	if( !bActive )
 		return;
@@ -310,6 +310,153 @@ void CUISlider::SetPosition( sf::Vector2f pos )
 {
 	shpSlider.setPosition( shpSlider.getPosition() + ( pos - vecPosition ) );
 	shpSliderBG.setPosition( shpSliderBG.getPosition() + ( pos - vecPosition ) );
+
+	vecPosition = pos;
+
+	//Update bounds position:
+	recBounds.top = pos.y;
+	recBounds.left = pos.x;
+};
+
+//##################################################
+// class: CUISliderVertical
+// desc: Simple slider that controls a float value
+//##################################################
+CUISliderVertical::CUISliderVertical( float* value, float low, float high, float size )
+{
+	// Generate UI elements
+	shpSliderBG = sf::RectangleShape( sf::Vector2f( 10, size ) );
+	shpSliderBG.setFillColor( sf::Color( 150, 150, 150 ) );
+
+	shpSlider = sf::RectangleShape( sf::Vector2f( 32, 10 ) );
+	shpSlider.setFillColor( sf::Color( 255, 255, 255 ) );
+
+	shpSliderBG.setPosition( (shpSlider.getGlobalBounds().width / 2.0f) - (shpSliderBG.getGlobalBounds().width / 2.0f), 0 );
+
+	minValue = low;
+	maxValue = high;
+
+	controlledValue = value;
+
+	if( controlledValue != nullptr )
+	{
+		// Set slider to a default position based on the controlled value:
+		float upperBounds = shpSliderBG.getGlobalBounds().height - shpSlider.getGlobalBounds().height;
+		float v1 = (((*value) / (high + low)));
+		shpSlider.setPosition( 0, (v1 * upperBounds) );
+	}
+
+	// Set bounds:
+	recBounds = sf::FloatRect( vecPosition, sf::Vector2f( shpSlider.getGlobalBounds().width, shpSliderBG.getGlobalBounds().height ) );
+
+	// Standard init:
+	isDragging = false;
+}
+
+void CUISliderVertical::Draw( sf::RenderTarget* window )
+{
+	if( !bActive )
+		return;
+
+	window->draw( shpSliderBG );
+	window->draw( shpSlider );
+};
+
+void CUISliderVertical::HandleEvent( sf::Event e )
+{
+	if( !bActive )
+		return;
+
+	if( e.type == sf::Event::MouseButtonPressed )
+	{
+		if( e.mouseButton.button == sf::Mouse::Button::Left )
+		{
+			if( !isDragging )
+			{
+				if( shpSlider.getGlobalBounds().contains( e.mouseButton.x, e.mouseButton.y ) )
+				{
+					shpSlider.setFillColor( sf::Color( 255, 0, 0 ) );
+					isDragging = true;
+
+					dragYOffs = e.mouseButton.y - shpSlider.getPosition().y;
+				}
+				else if( shpSliderBG.getGlobalBounds().contains( e.mouseButton.x, e.mouseButton.y ) )
+				{
+					//Establish needed variables
+					sf::Vector2f pos = shpSlider.getPosition();
+					float upperBounds = shpSliderBG.getGlobalBounds().height - shpSlider.getGlobalBounds().height;
+
+					//Calculate new position:
+					pos.y = e.mouseButton.y;
+					if( pos.y < shpSliderBG.getGlobalBounds().top ) //Clamp y min
+						pos.y = shpSliderBG.getGlobalBounds().top;
+					if( pos.y > shpSliderBG.getGlobalBounds().top + upperBounds ) //Clamp y max
+						pos.y = shpSliderBG.getGlobalBounds().top + upperBounds;
+
+					if( controlledValue != NULL )
+					{
+						//Calculate output value:
+						float value = (pos.y - shpSliderBG.getGlobalBounds().top) / upperBounds;
+						//Remap to mins and max
+						value = minValue + (value * (maxValue - minValue));
+
+						//Set assigned control value to our new value.
+						*controlledValue = value;
+					}
+
+					pos.x = shpSlider.getPosition().x;
+
+					shpSlider.setPosition( pos );
+				}
+			}
+		}
+	}
+	else if( e.type == sf::Event::MouseButtonReleased )
+	{
+		if( e.mouseButton.button == sf::Mouse::Button::Left )
+		{
+			shpSlider.setFillColor( sf::Color( 255, 255, 255 ) );
+
+			isDragging = false;
+		}
+	}
+	else if( e.type == sf::Event::MouseMoved ) //Highlight button when moused over.
+	{
+		if( isDragging )
+		{
+			//Establish needed variables
+			sf::Vector2f pos = shpSlider.getPosition();
+			float upperBounds = shpSliderBG.getGlobalBounds().height - shpSlider.getGlobalBounds().height;
+
+			//Calculate new position:
+			pos.y = e.mouseMove.y - dragYOffs;
+			if( pos.y < shpSliderBG.getGlobalBounds().top ) //Clamp y min
+				pos.y = shpSliderBG.getGlobalBounds().top;
+			if( pos.y > shpSliderBG.getGlobalBounds().top + upperBounds ) //Clamp y max
+				pos.y = shpSliderBG.getGlobalBounds().top + upperBounds;
+
+			if( controlledValue != NULL )
+			{
+				//Calculate output value:
+				float value = (pos.y - shpSliderBG.getGlobalBounds().top) / upperBounds;
+				//Remap to mins and max
+				value = minValue + (value * (maxValue - minValue));
+
+				//Set assigned control value to our new value.
+				*controlledValue = value;
+			}
+
+			pos.x = shpSlider.getPosition().x;
+
+			shpSlider.setPosition( pos );
+		}
+	}
+}
+
+void CUISliderVertical::SetPosition( sf::Vector2f pos )
+{
+	shpSlider.setPosition( shpSlider.getPosition() + (pos - vecPosition) );
+	shpSliderBG.setPosition( shpSliderBG.getPosition() + (pos - vecPosition) );
 
 	vecPosition = pos;
 
@@ -432,7 +579,7 @@ void CUITextfield::HandleEvent( sf::Event e )
 }
 
 //Draw elements
-void CUITextfield::Draw( sf::RenderWindow *window )
+void CUITextfield::Draw( sf::RenderTarget *window )
 {
 	if( !bActive )
 		return;

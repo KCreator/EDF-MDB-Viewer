@@ -85,6 +85,10 @@ float ReadFloat( std::vector<char> *buf, int pos, bool reverseBytes )
     }
     else
     {
+        //float val;
+        //memcpy( &val, &buf->data()[pos], sizeof( float ) );
+        //return val;
+
         chunk[0] = buf->at( pos );
 	    chunk[1] = buf->at( pos + 1 );
 	    chunk[2] = buf->at( pos + 2 );
@@ -97,6 +101,7 @@ float ReadFloat( std::vector<char> *buf, int pos, bool reverseBytes )
 }
 
 //Read a unicode wide string from byte buffer
+#ifndef WINDOWS
 std::wstring ReadUnicode( std::vector<char> *chunk, int pos, bool swapEndian )
 {
 	if( pos > chunk->size( ) )
@@ -136,6 +141,52 @@ std::wstring ReadUnicode( std::vector<char> *chunk, int pos, bool swapEndian )
 
 	return strn;
 }
+#else
+std::wstring ReadUnicode(std::vector<char> *chunk, int pos, bool swapEndian)
+{
+	if (pos > chunk->size())
+		return L"";
+
+	unsigned int bufPos = pos;
+
+	std::vector< unsigned char > bytes;
+
+	int zeroCount = 0;
+
+	//Repeat until EOF, or otherwise broken
+	while (bufPos < chunk->size())
+	{
+		if (swapEndian)
+		{
+			if (bufPos % 2)
+			{
+				bytes.push_back(chunk->at(bufPos));
+				bytes.push_back(chunk->at(bufPos - 1));
+			}
+		}
+		else
+			bytes.push_back(chunk->at(bufPos));
+
+		if( chunk->at(bufPos) == 0x00 )
+		{
+			zeroCount++;
+			if (zeroCount == 2)
+				break;
+		}
+		else
+			zeroCount = 0;
+		bufPos++;
+	}
+
+	//if( bytes.size( ) == 0 );
+	//return L"";
+
+
+	std::wstring wstr(reinterpret_cast<wchar_t*>(&bytes[0]), bytes.size() / sizeof(wchar_t));
+
+	return wstr;
+}
+#endif
 
 //Read ASCII string from byte buffer
 std::string ReadASCII( std::vector<char> *chunk, int pos )

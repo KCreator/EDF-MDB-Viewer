@@ -256,3 +256,16 @@ std::vector< char > RABReader::ReadFile( std::wstring folder, std::wstring file 
 
 	return uncompressedBytes;
 }
+
+bool RABReader::HasFolder( std::wstring folderName )
+{
+	for( int i = 0; i < folders.size(); ++i )
+	{
+		if( folders[ i ] == folderName )
+		{
+			return true;
+		}
+	}
+	
+	return false;
+}

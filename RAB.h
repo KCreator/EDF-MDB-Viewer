@@ -3,6 +3,7 @@
 //CMPL Decompressor
 std::vector< char > CMPLDecompress( std::vector< char > in, bool verbose );
 
+//RAB File storage struct
 struct RABFile
 {
 	std::wstring folder;
@@ -11,11 +12,15 @@ struct RABFile
 	int filesize;
 };
 
+//Simple RAB Reader implementation
 class RABReader
 {
 public:
 	RABReader( const char *path ); //Read from path
 	std::vector< char > ReadFile( std::wstring folder, std::wstring file );
+
+	//Util fns
+	bool HasFolder( std::wstring folderName );
 
 	//Stored Data
 	int numFiles;

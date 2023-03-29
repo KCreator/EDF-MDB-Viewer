@@ -106,6 +106,42 @@ public:
 
 //Clone of 'MeshRenderer' optimised for MDB data.
 //TODO: Implement this.
+#include "MDBParser.h"
+#include "SimpleRenderer.h"
+
+class CMDBRenderer;
+
+class CMDBMesh
+{
+public:
+	CMDBMesh( MDBMeshInfo *info, CMDBRenderer *parent );
+	~CMDBMesh();
+
+	void Draw( Camera cam );
+
+	//Mesh info
+	MDBMeshInfo *pMeshInfo = nullptr;
+	CMDBRenderer* pParent = nullptr;
+
+	GLuint VAO;
+	GLuint VBO, EBO;
+	GLuint UVBuffer;
+	GLuint BoneIDS;
+	GLuint VertexWeights;
+
+	GLuint textureID;
+};
+
+class CMDBObject
+{
+public:
+	CMDBObject( MDBObject *obj, CMDBRenderer *parent );
+	void Draw( Camera cam );
+
+	std::vector< std::unique_ptr< CMDBMesh > > meshs;
+
+	MDBObject* pObjInfo = nullptr;
+};
 
 class CMDBRenderer
 {
@@ -115,21 +151,19 @@ public:
 
     void Draw( Camera cam );
 
-	GLuint VAO;
-    GLuint VBO, EBO;
+	std::unique_ptr<MDBReader> model;
+	std::vector< std::unique_ptr< CMDBObject > > objects;
 
-    GLuint TextureID, Texture;
-    GLuint UVBuffer;
+	//Shader to use.
+	GLuint shaderID;
 
-    GLuint boneBuffer;
-    GLuint boneWieghtBuffer;
-
-
-	GLuint vertexbuffer;
-    GLuint shaderID;
+	//Map of textures
+	std::map< std::wstring, GLuint > textureMap;
 
 	//Positioning:
-    glm::vec3 position;
-    glm::vec3 angles;
-    glm::vec3 scale;
+	glm::vec3 position;
+	glm::vec3 angles;
+	glm::vec3 scale;
+
+	std::vector<std::unique_ptr<CDebugLine>> lines;
 };

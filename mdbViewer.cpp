@@ -42,6 +42,8 @@
 #include "ToolState.h"
 #include "MapViewer.h"
 
+#include "GUI.h"
+
 //###################################################
 //Tool State System
 //###################################################
@@ -72,6 +74,10 @@ class CStateModelRenderer : public BaseToolState
 		meshObjReadoutText = sf::Text( strReadoutText, font, 15U );
 		meshObjReadoutText.setFillColor( sf::Color( 255, 0, 0 ) );
 		meshObjReadoutText.setPosition( sf::Vector2f( 5, 600-15-5 ) );
+
+		//Generate GUI elements:
+		//mainUI = CUITitledContainer( font, "Displaying Model", 800, 64, true );
+		//mainUI.SetActive( true );
 
 		//Init OPENGL related stuff;
 
@@ -252,6 +258,8 @@ class CStateModelRenderer : public BaseToolState
         window->pushGLStates();
         window->draw( text );
         window->draw( meshObjReadoutText );
+
+		//mainUI.Draw( window );
         window->popGLStates();
     
         window->display();
@@ -306,25 +314,28 @@ class CStateModelRenderer : public BaseToolState
 
 			//Text information about the viewer
 			std::wstring strObjName = model.model.names[ model.model.objects[0].nameindex ];
-			std::wstring strMeshInfo = L"Object 1 of " + std::to_wstring( model.model.objectscount );
+			std::wstring strMeshInfo = L"Objects: " + std::to_wstring( model.model.objectscount );
 			std::wstring strVertexInfo = L"Number of vertices (MESH 1): " + std::to_wstring( model.model.objects[0].meshs[0].vertexnumber );
 
 			text.setString( L"Displaying: " + strObjName + L"\n" + strMeshInfo + L"\n" + strVertexInfo );
 
 			//Fully construct the object:
-			for( int i = 0; i < model.model.objects[0].meshcount; ++i )
+			for( int i = 0; i < model.model.objectscount; ++i )
 			{
-				//Test folder names:
-				std::wstring folder = L"HD-TEXTURE";
-				if( !mdlArc.HasFolder( folder ) )
+				for( int j = 0; j < model.model.objects[ i ].meshcount; ++j )
 				{
-					folder = L"TEXTURE";
+					//Test folder names:
+					std::wstring folder = L"HD-TEXTURE";
+					if( !mdlArc.HasFolder( folder ) )
+					{
+						folder = L"TEXTURE";
+					}
+
+					std::vector< char > textureBytes;
+					textureBytes = mdlArc.ReadFile( folder, model.GetColourTextureFilename( i, j ) );
+
+					meshs.push_back( std::make_unique<MeshObject>( model.GetMeshPositionVertices( i, j ), model.GetMeshIndices( i, j ), model.GetMeshUVs( i, j ), programID, LoadDDS_FromBuffer( textureBytes ) ) );
 				}
-
-				std::vector< char > textureBytes;
-				textureBytes = mdlArc.ReadFile( folder, model.GetColourTextureFilename( 0, i ) );
-
-				meshs.push_back( std::make_unique<MeshObject>( model.GetMeshPositionVertices(0, i), model.GetMeshIndices(0, i), model.GetMeshUVs( 0, i ), programID, LoadDDS_FromBuffer(textureBytes) ) );
 			}
 
 			//Camera angle for looking at humanoid bones.
@@ -395,6 +406,9 @@ class CStateModelRenderer : public BaseToolState
 	//Control variables
 	sf::Vector2i mouseOldPos;
 	bool isDragging;
+
+	//GUI
+	//CUITitledContainer mainUI;
 };
 
 class CStateSceneRenderer : public BaseToolState
@@ -854,8 +868,6 @@ protected:
 	std::string path;
 };
 
-#include "GUI.h"
-
 //File browser UI element.
 class CUIFileBrowser : public CBaseUIElement
 {
@@ -1228,65 +1240,6 @@ public:
 	float testvalue;
 };
 
-//CAS.
-class CAS
-{
-public:
-	CAS( const char *path )
-	{
-		//Create input stream from path
-		std::ifstream file( path, std::ios::binary | std::ios::ate );
-		std::streamsize size = file.tellg( );
-		file.seekg( 0, std::ios::beg );
-
-		std::vector<char> buffer( size );
-		if( file.read( buffer.data( ), size ) )
-		{
-			int pos = 0x0;
-
-			//Read.
-			//pos = 0xc;
-			int TControlCount = ReadInt( &buffer, 0xc );
-			int TControlStart = ReadInt( &buffer, 0x10 );
-
-			int VControlCount = ReadInt( &buffer, 0x14 );
-			int VControlStart = ReadInt( &buffer, 0x18 );
-
-			int AnimGroupCount = ReadInt( &buffer, 0x1c );
-			int AnimGroupStart = ReadInt( &buffer, 0x20 );
-
-			//Read 'Animation Groups'
-			pos = AnimGroupStart;
-			for( int i = 0; i < AnimGroupCount; ++i )
-			{
-				int base = pos;
-
-				int strOfs = ReadInt( &buffer, pos );
-				std::wstring groupName = ReadUnicode( &buffer, pos + strOfs, false );
-				//std::wcout << strn + L"\n";
-
-				pos += 0x4;
-
-				int number = ReadInt( &buffer, pos );
-				pos += 0x4;
-
-				int ofs = base + ReadInt( &buffer, pos );
-				pos += 0x4;
-
-				for( int j = 0; j < number; ++j )
-				{
-					strOfs = ReadInt( &buffer, ofs );
-					std::wstring name = ReadUnicode( &buffer, ofs + strOfs, false );
-
-					std::wcout << groupName + L"/" + name + L"\n";
-
-					ofs += 0x24;
-				}
-			}
-		}
-	};
-};
-
 #ifdef WINDOWS
 
 #include <locale.h>
@@ -1321,6 +1274,29 @@ void init_locale(void)
 }
 
 #endif
+
+/*
+std::wstring OpenFileDialogue( LPCWSTR filter = L"All Files (*.*)\0*.*\0", HWND owner = NULL )
+{
+	OPENFILENAMEW ofn;
+	wchar_t fileName[ MAX_PATH ] = L"";
+	ZeroMemory( &ofn, sizeof( ofn ) );
+	ofn.lStructSize = sizeof( OPENFILENAME );
+	ofn.hwndOwner = owner;
+	ofn.lpstrFilter = filter;
+	ofn.lpstrFile = fileName;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+	ofn.lpstrDefExt = L"";
+	std::wstring fileNameStr;
+
+	if( GetOpenFileNameW( &ofn ) )
+		fileNameStr = fileName;
+	return fileNameStr;
+}
+*/
+
+//#include "CAS.h"
 
 //##############################################################
 //Program entrypoint.
@@ -1357,6 +1333,27 @@ int wmain( int argc, wchar_t* argv[] )
 		/* Problem: glewInit failed, something is seriously wrong. */
 		fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
 	}
+
+	//This is an option, but lets not use it yet.
+	/*
+	// Get the native window handle
+	HWND hWnd = window.getSystemHandle();
+
+	HMENU hMenu = CreatePopupMenu();
+	AppendMenu( hMenu, MF_STRING, 1, L"New" );
+	AppendMenu( hMenu, MF_STRING, 2, L"Open" );
+	AppendMenu( hMenu, MF_STRING, 3, L"Save" );
+	AppendMenu( hMenu, MF_SEPARATOR, 0, NULL );
+	AppendMenu( hMenu, MF_STRING, 4, L"Exit" );
+
+	// Create the "File" menu bar using the Windows API CreateMenu function
+	HMENU hMenuBar = CreateMenu();
+	AppendMenu( hMenuBar, MF_POPUP, (UINT_PTR)hMenu, L"File" );
+
+	// Set the "File" menu bar as the window menu using the Windows API SetMenu function
+	SetMenu( hWnd, hMenuBar );
+	*/
+
 #endif
 
 	//Init shader list:
@@ -1407,6 +1404,8 @@ int wmain( int argc, wchar_t* argv[] )
 
 	sf::Clock frameTime;
 
+	std::unique_ptr<CMDBRenderer> testMesh = std::make_unique< CMDBRenderer >();
+
     //MAIN LOOP
     while( window.isOpen() )
     {
@@ -1425,7 +1424,18 @@ int wmain( int argc, wchar_t* argv[] )
 			states->ProccessEvent( event );
         }
 
-        states->Draw(); //Todo: Place common draw steps before and after state.
+        //states->Draw(); //Todo: Place common draw steps before and after state.
+
+		//TEMP
+		Camera cam;
+		cam.Projection = glm::perspective( glm::radians( 45.0f ), (float)window.getSize().x / (float)window.getSize().y, 0.1f, 100.0f );
+		cam.View = glm::lookAt( glm::vec3( 0, 0, 5 ), glm::vec3( 0, 0, 0 ), glm::vec3( 0, 1, 0 ) );
+		window.clear();
+		glClear( GL_DEPTH_BUFFER_BIT );
+		testMesh->Draw( cam );
+
+
+		window.display();
 
 		float dT = frameTime.restart().asSeconds();
 		//std::wcout << std::to_wstring( dT ) + L"\n";
@@ -1435,6 +1445,14 @@ int wmain( int argc, wchar_t* argv[] )
 	delete states;
 
     //Todo: Nicely clean up OpenGL and other such memory.
+
+	/*
+#ifdef WINDOWS
+	// Cleanup
+	DestroyMenu( hMenu );
+	DestroyMenu( hMenuBar );
+#endif
+	*/
 
     return 0;
 }
